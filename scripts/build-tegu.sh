@@ -89,13 +89,25 @@ else
 fi
 
 # --- lunch our product + build ------------------------------------------------
-banner "lunch mikeos_tegu-${VARIANT}"
-lunch "mikeos_tegu-${VARIANT}"
+# VERIFIED 2026-07-26 on the live LineageOS 23.2 build:
+#   * Android 16 requires an explicit RELEASE in the combo:
+#         lunch <product>-<release>-<variant>   e.g. mikeos_tegu-bp4a-userdebug
+#     `lunch mikeos_tegu-userdebug` fails ("Invalid lunch combo"). The release
+#     for tegu is bp4a (matches the stock BP4A.* platform); trunk_staging also exists.
+#   * Do NOT use `brunch mikeos_tegu` — brunch PREPENDS `lineage_` and looks for a
+#     nonexistent product `lineage_mikeos_tegu` (and tries roomservice on it).
+#     For a custom product you must `lunch …` then `mka bacon`.
+RELEASE="${RELEASE:-bp4a}"
+banner "lunch mikeos_tegu-${RELEASE}-${VARIANT}"
+lunch "mikeos_tegu-${RELEASE}-${VARIANT}" || {
+  echo "lunch failed — check the release name (bp4a/trunk_staging) and that vendor/google/tegu blobs exist." >&2
+  exit 1
+}
+echo "TARGET_PRODUCT=$(get_build_var TARGET_PRODUCT)  TARGET_RELEASE=${RELEASE}"
 
-banner "brunch mikeos_tegu (this takes a long time)"
-# brunch = lunch + build the ROM zip target. Using it keeps ccache/jobs env.
-# (Equivalent: `mka bacon` after lunch.)
-brunch "mikeos_tegu-${VARIANT}" -j"${JOBS}"
+banner "mka bacon (build the flashable ROM zip — this takes 1-3h)"
+# bacon = the flashable/OTA zip target. mka keeps the ccache/jobs env.
+mka bacon
 
 banner "BUILD DONE"
 echo "Output ROM zip: ${SRC_ROOT}/out/target/product/tegu/*.zip"
