@@ -123,9 +123,25 @@ lunch "mikeos_tegu-${RELEASE}-${VARIANT}" || {
 }
 echo "TARGET_PRODUCT=$(get_build_var TARGET_PRODUCT)  TARGET_RELEASE=${RELEASE}"
 
-banner "mka bacon (build the flashable ROM zip — this takes 1-3h)"
-# bacon = the flashable/OTA zip target. mka keeps the ccache/jobs env.
-mka bacon
+banner "mka bacon -j${JOBS} (build the flashable ROM zip)"
+# bacon = the flashable/OTA zip target.
+#
+# THREADS / PERFORMANCE (learned the hard way):
+#   AOSP is massively parallel — ninja runs dozens of clang++ at once. Give it cores.
+#   * Size the BUILD CONTAINER to the cores the box can spare. The Hetzner box has 32
+#     hardware threads; when the OSM/MikeMaps 48h import is IDLE, run the container with
+#     ~28-30 cores (leave a few for the map-serving containers + host):
+#         docker run --cpus=28 ...          (or: docker update --cpus=28 <container> live)
+#     While the OSM import IS running, cap lower (e.g. --cpus=16) to not starve it.
+#   * GOTCHA: with `--cpus=N` (a CFS *quota*), `nproc` inside the container still reports
+#     the full 32, so ninja auto-tunes to -j32 and THRASHES against the quota
+#     (oversubscription, load avg >> cores). Fix: pass an explicit -j that MATCHES the
+#     container's real core budget (set JOBS=<the --cpus value>). Alternatively pin cores
+#     with `--cpuset-cpus=0-27` so nproc reports the real count and ninja self-tunes.
+#   * RAM is not the limit here (125GB; AOSP wants ~2GB/core → 28 cores ≈ 56GB). ccache
+#     (USE_CCACHE=1) makes every rebuild after the first dramatically faster regardless.
+# So: set JOBS to the container's core budget (default nproc), and pass it explicitly.
+mka bacon -j"${JOBS}"
 
 banner "BUILD DONE"
 echo "Output ROM zip: ${SRC_ROOT}/out/target/product/tegu/*.zip"
