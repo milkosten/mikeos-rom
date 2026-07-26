@@ -1,21 +1,24 @@
 # =============================================================================
 # MikeOS daemon-as-system — Soong/Make module for the launcher binary.
 #
-# The init service execs /system/bin/mikeos-daemon, which MUST be executable
+# The init service execs /product/bin/mikeos-daemon, which MUST be executable
 # (+x). PRODUCT_COPY_FILES cannot set the executable bit, so the launcher ships
 # as a PREBUILT EXECUTABLE module (BUILD_PREBUILT with LOCAL_MODULE_CLASS :=
 # EXECUTABLES installs 0755 into .../bin). The module (mikeos-daemon) is pulled
 # in by PRODUCT_PACKAGES in system-daemon.mk.
 #
 # This is the standard AOSP idiom for "a script that must be executable in
-# /system/bin". (A Soong `sh_binary` in an Android.bp would be equally correct;
+# a bin/ dir". (A Soong `sh_binary` in an Android.bp would be equally correct;
 # this tree already uses Android.mk / BUILD_PREBUILT for its prebuilts, so we
 # stay consistent with that idiom.)
 #
-# KNOWN-UNVERIFIED (see README.md):
-#   * LOCAL_MODULE_PATH := $(TARGET_OUT)/bin puts it in /system/bin. If the ROM
-#     prefers /vendor/bin, switch to $(TARGET_OUT_VENDOR)/bin AND update the
-#     sepolicy file_contexts + the .rc service path to match.
+# PARTITION: installs to /PRODUCT/bin, NOT /system/bin. tegu (Pixel) enforces
+# PRODUCT_ARTIFACT_PATH_REQUIREMENT — overlay content may NOT land in /system/*
+# (a /system/bin/mikeos-daemon install fails the build with
+# artifact_path_requirements.mk error). All MikeOS overlay content lives on the
+# product/vendor partitions. Hence LOCAL_PRODUCT_MODULE + TARGET_OUT_PRODUCT.
+# The .rc (below) and sepolicy file_contexts reference /product/bin/mikeos-daemon
+# to match.
 # =============================================================================
 
 LOCAL_PATH := $(call my-dir)
@@ -26,6 +29,9 @@ LOCAL_MODULE_TAGS := optional
 LOCAL_MODULE_CLASS := EXECUTABLES
 # The source is the POSIX-sh launcher checked in beside this Android.mk.
 LOCAL_SRC_FILES := bin/mikeos-daemon
-# Install into /system/bin (executable, 0755). See KNOWN-UNVERIFIED above.
-LOCAL_MODULE_PATH := $(TARGET_OUT)/bin
+# Install into /PRODUCT/bin (executable, 0755) — NOT /system/bin (blocked by
+# tegu's PRODUCT_ARTIFACT_PATH_REQUIREMENT). LOCAL_PRODUCT_MODULE marks it as a
+# product-partition module; TARGET_OUT_PRODUCT/bin is /product/bin at runtime.
+LOCAL_PRODUCT_MODULE := true
+LOCAL_MODULE_PATH := $(TARGET_OUT_PRODUCT)/bin
 include $(BUILD_PREBUILT)

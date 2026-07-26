@@ -99,11 +99,15 @@ PRODUCT_PACKAGES += \
 # vendor/mikeos/system/README.md for the KNOWN-UNVERIFIED list. To disable the
 # whole layer, comment out the single inherit line below.
 #
-# NOTE (runtime packaging TODO): the launcher still defaults to the Termux
-# runtime path for continuity; baking Node+Postgres+Redis+dist natively into the
-# image is the documented follow-up. The init-service + absolute-dirs hardening
-# is the deliverable here. The DoH shim (dns-fix.js) is unchanged.
+# RUNTIME BAKED (the packaging follow-up is DONE): the launcher now points at the
+# baked, Termux-FREE runtime at /data/mikeos/runtime, extracted on first boot from
+# a product-partition payload (/product/mikeos/mikeos-runtime.tar.gz). Node +
+# Postgres + Redis + the mikedaemon dist/ ship in that payload — NO Termux. The
+# DoH shim (dns-fix.js line 2) is unchanged. Install rules:
+#   system-daemon.mk : init .rc + /product/bin launcher + sepolicy
+#   runtime.mk       : the /product/mikeos/mikeos-runtime.tar.gz payload
 $(call inherit-product-if-exists, vendor/mikeos/system/system-daemon.mk)
+$(call inherit-product-if-exists, vendor/mikeos/system/runtime.mk)
 
 # --- MikeOS system location provider ------------------------------------------
 # com.mikeos.location is the SINGLE designated GNSS provider (DAEMON-AS-SYSTEM.md

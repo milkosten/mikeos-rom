@@ -7,26 +7,35 @@
 # baked data dirs (/data/mikeos/**) eliminate the Redis `dir ./` / read-only-cwd
 # bug class by construction (see mikedaemon/deploy/README.md for that incident).
 #
+# The daemon RUNTIME (Node + Postgres + Redis + mikedaemon dist/) is baked into
+# the ROM as a compressed payload at /product/mikeos/mikeos-runtime.tar.gz and
+# extracted ONCE on first boot to /data/mikeos/runtime (Termux-free). The
+# launcher /product/bin/mikeos-daemon also extracts it (belt-and-suspenders).
+#
 # Installed to /vendor/etc/init/mikedaemon.rc (Android auto-imports every .rc in
 # /vendor/etc/init at boot — no explicit `import` needed).
+#
+# PARTITION NOTE: the launcher lives at /PRODUCT/bin/mikeos-daemon (NOT
+# /system/bin — tegu's PRODUCT_ARTIFACT_PATH_REQUIREMENT forbids overlay content
+# on /system/*). The service exec path and sepolicy file_contexts match.
 #
 # ---------------------------------------------------------------------------
 # KNOWN-UNVERIFIED (resolve on the NEXT ROM build — see ../README.md):
 #   * seclabel u:r:mikedaemon:s0 — the domain must exist in sepolicy AND the
-#     exec file must be labeled mikeos-daemon_exec, or init refuses to start the
-#     service (falls back / logs an avc). Verified only once sepolicy compiles.
-#   * `class main` ordering — starts with the main class at boot. If the daemon
-#     must wait for /data to be decrypted, post-fs-data (used below to mkdir) is
-#     the correct trigger; the actual `start` is issued there after the dirs
+#     exec file must be labeled mikedaemon_exec, or init refuses to start the
+#     service. Verified only once sepolicy compiles.
+#   * `class main` ordering — starts with the main class at boot. The daemon
+#     needs /data decrypted; post-fs-data (used below to mkdir + extract) is the
+#     correct trigger; the actual `start` is issued there after dirs + runtime
 #     exist. Confirm ordering vs. FBE (file-based-encryption) unlock on device.
-#   * group list (root system inet net_raw) — net_raw is for the loopback TLS
-#     bind / raw networking the daemon does; trim once avc/permission needs are
-#     known. `inet` is required for socket() at all.
-#   * oom_score_adjust -800 — keeps the daemon well away from the LMK. Valid
-#     range is -1000..1000; -800 mirrors other critical native services.
+#   * first-boot extraction time — the tar.gz payload is ~100-300 MB; `exec` of
+#     tar in post-fs-data blocks boot until it finishes (seconds to ~1 min).
+#     If that delays boot too long, move the extract into the launcher only
+#     (it already does it) and drop the exec here.
+#   * oom_score_adjust -800 — keeps the daemon away from the LMK. -1000..1000.
 # ---------------------------------------------------------------------------
 
-service mikeos-daemon /system/bin/mikeos-daemon
+service mikeos-daemon /product/bin/mikeos-daemon
     # NOT oneshot: init restarts it whenever it exits (self-heal on crash).
     class main
     # The launcher execs `node dist/index.js` in the foreground so THIS pid is
@@ -38,20 +47,30 @@ service mikeos-daemon /system/bin/mikeos-daemon
     # Keep the brain alive under memory pressure (every app depends on it).
     oom_score_adjust -800
     # Do not start automatically here — post-fs-data starts it AFTER the data
-    # dirs are created (so the very first boot can't race the mkdir below).
+    # dirs are created + the runtime is extracted (first boot can't race them).
     disabled
 
-# Create the absolute, always-writable data root BEFORE starting the daemon.
+# Create the absolute, always-writable data root BEFORE starting the daemon,
+# and extract the baked runtime payload on first boot.
 # post-fs-data runs after /data is mounted+decrypted, which is where /data/mikeos
 # must live. Modes are permissive-ish first-draft (0771); tighten with sepolicy.
 on post-fs-data
     mkdir /data/mikeos 0771 root system
+    mkdir /data/mikeos/runtime 0755 root system
     mkdir /data/mikeos/pg 0700 root system
     mkdir /data/mikeos/redis 0771 root system
     mkdir /data/mikeos/daemon 0771 root system
     mkdir /data/mikeos/run 0771 root system
+    # FIRST-BOOT: extract the baked Node+Postgres+Redis+daemon runtime payload
+    # to /data/mikeos/runtime IF it's not already unpacked. Guarded by the
+    # /data/mikeos/runtime/.extracted marker so it runs exactly once. `exec`
+    # blocks post-fs-data until the untar completes. toybox tar handles gzip.
+    # (The launcher also extracts as belt-and-suspenders; this pre-warms it so
+    # the very first `start` finds a ready runtime.)
+    exec u:r:mikedaemon:s0 root root -- /system/bin/sh -c "[ -f /data/mikeos/runtime/.extracted ] || { /system/bin/tar -xzf /product/mikeos/mikeos-runtime.tar.gz -C /data/mikeos/runtime && /system/bin/chmod -R a+rX /data/mikeos/runtime && /system/bin/touch /data/mikeos/runtime/.extracted; }"
     # restorecon so the mikeos_data_file label (file_contexts) is applied to the
     # freshly-created dirs even before the next full relabel.
     restorecon_recursive /data/mikeos
-    # Now that the data root exists + is labeled, launch the supervised daemon.
+    # Now that the data root exists + is labeled + runtime extracted, launch the
+    # supervised daemon.
     start mikeos-daemon

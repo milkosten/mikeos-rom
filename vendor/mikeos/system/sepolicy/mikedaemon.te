@@ -30,8 +30,11 @@
 #     platform requires a typed port (portcon), add one and reference it.
 # =============================================================================
 
+# The launcher lives on the PRODUCT partition (/product/bin/mikeos-daemon), not
+# vendor — so its exec type is a plain exec_type/file_type (NOT vendor_file_type;
+# labelling a /product file as vendor_file_type would be a neverallow violation).
 type mikedaemon, domain;
-type mikedaemon_exec, exec_type, file_type, vendor_file_type;
+type mikedaemon_exec, exec_type, file_type;
 
 # Type for the daemon's data tree /data/mikeos/** (labeled via file_contexts).
 type mikeos_data_file, file_type, data_file_type, core_data_file_type;
