@@ -148,11 +148,12 @@ The **DoH shim stays**: `dist/index.js` line 2 must remain `require('./dns-fix.j
    branch). Also the **datastore uid** (`10151`) is Termux-specific.
 5. **Launcher as prebuilt vs copy-file** — shipped as a `BUILD_PREBUILT` EXECUTABLES
    module so it installs **+x** (copy-files can't). A Soong `sh_binary` in `Android.bp`
-   would be equally valid; confirm the module builds and lands at `/system/bin`.
-6. **TARGET_COPY_OUT_* partitions** — `.rc` → vendor `etc/init`, launcher → system
-   `bin`. On a system-only device these may coincide. Confirm the `.rc` is auto-imported
-   and the launcher is executable on first boot; adjust partitions + the file_contexts /
-   `.rc` service path together if either must move (e.g. to `/vendor/bin`).
+   would be equally valid; confirm the module builds and lands at `/product/bin`.
+6. **TARGET_COPY_OUT_* partitions** — `.rc` → vendor `etc/init`; launcher + payload →
+   **product** (`/product/bin`, `/product/mikeos`) to satisfy tegu's
+   PRODUCT_ARTIFACT_PATH_REQUIREMENT (no overlay artifact on `/system/*`). Confirm the
+   `.rc` is auto-imported and the launcher is executable on first boot; the file_contexts /
+   `.rc` service path already match `/product/bin/mikeos-daemon`.
 7. **BOARD_VENDOR_SEPOLICY_DIRS from a product .mk** — works in current AOSP/LineageOS;
    if not picked up, move that line to `device/google/tegu/.../BoardConfig.mk`.
 8. **Postgres/Redis domains** — today they run in the datastore uid's domain (via `su`),
