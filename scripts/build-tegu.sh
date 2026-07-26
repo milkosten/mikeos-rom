@@ -123,6 +123,18 @@ lunch "mikeos_tegu-${RELEASE}-${VARIANT}" || {
 }
 echo "TARGET_PRODUCT=$(get_build_var TARGET_PRODUCT)  TARGET_RELEASE=${RELEASE}"
 
+# --- Force the bootanimation to regenerate ------------------------------------
+# Lineage's bootanimation genrule, when TARGET_BOOTANIMATION (a prebuilt zip) is set,
+# just `cp`s that file to its output — but it interpolates the path as a STRING in the
+# genrule cmd, NOT as a tracked `srcs` input. So a CONTENT change to our prebuilt
+# (vendor/mikeos/prebuilt/media/bootanimation.zip) does NOT retrigger the copy, and the
+# build ships a STALE bootanimation (it once shipped a 720x1600 zip after we'd already
+# updated the source to the native 1080x2424 — letterboxed boot). Delete the cached
+# genrule + install artifacts so ninja re-runs the cp from our current zip every build.
+banner "force bootanimation regen (stale-genrule guard)"
+find "${SRC_ROOT}/out" -path '*vendor/lineage/bootanimation*' -name 'bootanimation.zip' -delete 2>/dev/null || true
+rm -f "${SRC_ROOT}/out/target/product/${PRODUCT_DEVICE:-tegu}/product/media/bootanimation.zip" 2>/dev/null || true
+
 banner "mka bacon -j${JOBS} (build the flashable ROM zip)"
 # bacon = the flashable/OTA zip target.
 #
