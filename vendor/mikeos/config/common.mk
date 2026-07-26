@@ -104,3 +104,13 @@ PRODUCT_PACKAGES += \
 # image is the documented follow-up. The init-service + absolute-dirs hardening
 # is the deliverable here. The DoH shim (dns-fix.js) is unchanged.
 $(call inherit-product-if-exists, vendor/mikeos/system/system-daemon.mk)
+
+# --- MikeOS system location provider ------------------------------------------
+# com.mikeos.location is the SINGLE designated GNSS provider (DAEMON-AS-SYSTEM.md
+# Part B). Preinstalled system app (via prebuilt/apps/Android.mk -> /product/app,
+# so non-removable). Location is auto-granted by the default-permissions XML below
+# so it feeds the daemon from first boot with NO runtime prompt. MikeGuide's old
+# provider role is removed (it becomes a plain reader of GET /api/location).
+PRODUCT_PACKAGES += MikeLocation
+PRODUCT_COPY_FILES += \
+    vendor/mikeos/etc/default-permissions/mikeos-location-default-permissions.xml:$(TARGET_COPY_OUT_PRODUCT)/etc/default-permissions/mikeos-location-default-permissions.xml

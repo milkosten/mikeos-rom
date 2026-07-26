@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Auto-grant location to the MikeOS system location provider (com.mikeos.location)
+  so it feeds the daemon from first boot with NO runtime permission prompt.
+
+  PermissionController reads default-permission grant XMLs from
+  /{system,product,vendor}/etc/default-permissions/. This grants the runtime
+  (dangerous) location permissions to the preinstalled provider. fixed="false"
+  lets the user later revoke if they want; make it "true" to lock it on.
+
+  This is Part B of DAEMON-AS-SYSTEM.md: location is an OS-level service, not an
+  app the user must open — com.mikeos.location is the single designated provider
+  (MikeGuide's provider role is removed; it becomes a plain reader).
+-->
+<exceptions>
+    <exception package="com.mikeos.location">
+        <permission name="android.permission.ACCESS_FINE_LOCATION" fixed="false"/>
+        <permission name="android.permission.ACCESS_COARSE_LOCATION" fixed="false"/>
+        <permission name="android.permission.ACCESS_BACKGROUND_LOCATION" fixed="false"/>
+    </exception>
+</exceptions>
