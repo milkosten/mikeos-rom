@@ -25,11 +25,17 @@ $(call inherit-product, vendor/mikeos/config/version.mk)
 PRODUCT_PACKAGE_OVERLAYS += vendor/mikeos/overlay
 
 # --- Boot animation -----------------------------------------------------------
-# "Michael Westoo from the sky", 720x1600. Lands on the product partition; the
-# bootanimation service prefers /product/media/bootanimation.zip over the
-# system default, so this wins without touching /system.
-PRODUCT_COPY_FILES += \
-    vendor/mikeos/prebuilt/media/bootanimation.zip:$(TARGET_COPY_OUT_PRODUCT)/media/bootanimation.zip
+# "Michael Westoo from the sky", 720x1600. Lands on product/media/bootanimation.zip.
+#
+# NOTE: do NOT install this via PRODUCT_COPY_FILES. LineageOS' own soong module
+# vendor/lineage/bootanimation (prebuilt_media "bootanimation.zip",
+# product_specific) already owns the install rule for that path — a second rule
+# makes kati fail with "overriding commands for target ... bootanimation.zip".
+# Instead we feed our prebuilt through Lineage's module by setting
+# TARGET_BOOTANIMATION at board-config time (see device/google/tegu/tegu/
+# BoardConfig.mk); BoardConfigSoong.mk turns that into
+# soong_config_set lineage_bootanimation.prebuilt_file, so the module copies our
+# zip. Single install rule, MikeOS branding still wins. See BUILD-FIXES-tegu.md.
 
 # --- MikeOS app fleet (prebuilt APKs) -----------------------------------------
 # Module names are defined in vendor/mikeos/prebuilt/apps/Android.mk and are

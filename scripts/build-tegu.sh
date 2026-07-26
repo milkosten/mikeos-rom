@@ -43,6 +43,24 @@ else
   echo "ccache: NOT found — build will be slower (set CCACHE_EXEC to enable)."
 fi
 
+# --- MikeOS: ensure LINEAGE_BUILD is derived for our mikeos_ product prefix ----
+# LineageOS keys a lot of plumbing (BoardConfigLineage.mk / BoardConfigSoong.mk,
+# which populate the lineageVarsPlugin soong namespace used by the kernel-header
+# genrules) on LINEAGE_BUILD being non-empty. check_product() in
+# vendor/lineage/build/envsetup.sh only sets LINEAGE_BUILD when the product name
+# starts with "lineage_". Our product is mikeos_tegu, so without this the soong
+# build fails with: unknown variable '$(TARGET_KERNEL_PLATFORM_TARGET)' /
+# '$(KERNEL_BUILD_OUT_PREFIX)'. Teach check_product() the mikeos_ prefix too.
+# Idempotent; re-applied here so a repo sync of vendor/lineage cannot silently
+# revert it. See BUILD-FIXES-tegu.md.
+banner "ensure LINEAGE_BUILD handles mikeos_ prefix (kernel soong vars)"
+LINEAGE_ENVSETUP="${SRC_ROOT}/vendor/lineage/build/envsetup.sh"
+if [ -f "${LINEAGE_ENVSETUP}" ] && ! grep -q 'mikeos_' "${LINEAGE_ENVSETUP}"; then
+  python3 "${SRC_ROOT}/vendor/mikeos/scripts/patch-lineage-build-prefix.py" "${LINEAGE_ENVSETUP}"
+else
+  echo "  LINEAGE_BUILD mikeos_ prefix already handled (or patcher n/a)"
+fi
+
 # --- Envsetup -----------------------------------------------------------------
 banner "source build/envsetup.sh"
 # shellcheck disable=SC1091
