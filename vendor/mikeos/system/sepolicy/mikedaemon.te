@@ -1,0 +1,72 @@
+# =============================================================================
+# mikedaemon SELinux policy (daemon-as-system, Part A) — FIRST DRAFT.
+#
+# Domain for the MikeOS daemon launched by the init service `mikeos-daemon`
+# (/system/bin/mikeos-daemon -> seclabel u:r:mikedaemon:s0). Confines the
+# daemon: it may manage /data/mikeos/**, bind the loopback TLS port (7743),
+# exec its Node/Postgres/Redis runtime, and use the network.
+#
+# ***** PERMISSIVE-TO-START — audit-and-tighten. *****
+# We ship `permissive mikedaemon;` so the FIRST hardened build BOOTS even with
+# an incomplete ruleset, and every access is logged as an avc rather than
+# denied. Procedure on the build/boot machine:
+#   1. Boot, exercise the daemon (reboot + kill -9 it a few times).
+#   2. Collect denials:  adb shell 'dmesg | grep avc'   and  logcat | grep avc
+#      (or `audit2allow -p` against the collected log).
+#   3. Fold the real allows in below, then DELETE the `permissive` line so the
+#      domain becomes enforcing.
+# Do NOT leave this permissive in a shipping ROM.
+#
+# KNOWN-UNVERIFIED (see ../README.md):
+#   * Macro availability (init_daemon_domain, net_domain, unix_socket_connect,
+#     allow ... node ...) depends on the LineageOS 23.2 / Android 16 sepolicy
+#     version. If a macro is undefined the policy won't compile — swap for the
+#     raw `allow` it expands to and note it.
+#   * Whether pg/redis need their OWN domains. Today the launcher `su`'s them to
+#     a datastore uid, so they run in that uid's domain (untrusted_app-ish), not
+#     mikedaomon. Once the runtime is baked and run directly, give them domains
+#     (mikeos_postgres / mikeos_redis) or let them run in mikedaemon.
+#   * Port label for 7743: we allow node_bind on the generic port type. If the
+#     platform requires a typed port (portcon), add one and reference it.
+# =============================================================================
+
+type mikedaemon, domain;
+type mikedaemon_exec, exec_type, file_type, vendor_file_type;
+
+# Type for the daemon's data tree /data/mikeos/** (labeled via file_contexts).
+type mikeos_data_file, file_type, data_file_type, core_data_file_type;
+
+# init transitions to this domain when it execs a mikedaemon_exec file.
+init_daemon_domain(mikedaemon)
+
+# ---- PERMISSIVE FIRST (remove once avc denials are folded in) ----------------
+permissive mikedaemon;
+
+# ---- Data: full management of /data/mikeos/** --------------------------------
+allow mikedaemon mikeos_data_file:dir { create_dir_perms };
+allow mikedaemon mikeos_data_file:file { create_file_perms };
+allow mikedaemon mikeos_data_file:sock_file { create_file_perms };
+allow mikedaemon mikeos_data_file:lnk_file { create_file_perms };
+# Relabel dirs/files under /data/mikeos (init restorecon / our chmod).
+allow mikedaemon mikeos_data_file:{ dir file } relabelto;
+
+# ---- Exec its own launcher/runtime -------------------------------------------
+# Run the Node/Postgres/Redis binaries. On the Termux-layered path these live
+# under an app data dir; on the baked ROM they live under system/vendor. We
+# allow execute of the exec type; broaden per denials once the runtime path is
+# finalized (this is a KNOWN-UNVERIFIED area — the runtime is not yet baked).
+allow mikedaemon mikedaemon_exec:file { r_file_perms execute_no_trans };
+
+# ---- Network: loopback TLS (7743) + outbound (GPU / clouds) -------------------
+# Full network access (the daemon talks to loopback apps and to the internet).
+net_domain(mikedaemon)
+# Bind/listen on the loopback TLS port; generic node_bind (typed portcon TODO).
+allow mikedaemon node:tcp_socket node_bind;
+allow mikedaemon self:tcp_socket { create_stream_socket_perms };
+allow mikedaemon self:udp_socket { create_socket_perms };
+
+# ---- Talk to system services the daemon uses (dumpsys location, etc.) --------
+# The daemon shells out (curl, dumpsys, su for device actions). These are
+# intentionally coarse for the first draft — tighten from real denials.
+allow mikedaemon self:capability { setuid setgid net_raw net_admin dac_override };
+allow mikedaemon self:global_capability_class_set { setuid setgid net_raw };

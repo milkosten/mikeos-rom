@@ -1,0 +1,147 @@
+#!/system/bin/sh
+# =============================================================================
+# mikeos-daemon — hardened MikeOS daemon launcher (daemon-as-system, Part A)
+#
+# Installed to /system/bin/mikeos-daemon and run by the init service
+# `mikeos-daemon` (vendor/mikeos/system/init/mikedaemon.rc), under root.
+#
+# It replaces start-daemon.sh's fragile, cwd-dependent launch. Everything here
+# uses ABSOLUTE, writable paths under /data/mikeos so it does NOT matter what
+# the working directory is when init spawns us (the read-only-`/` Redis bug is
+# impossible by construction). It:
+#   1. sets absolute HOME / TMPDIR / PATH / LD_LIBRARY_PATH,
+#   2. ensures the /data/mikeos data dirs exist + are writable,
+#   3. starts Postgres (-D /data/mikeos/pg, initdb once if empty),
+#   4. starts Redis (--dir /data/mikeos/redis --stop-writes-on-bgsave-error no),
+#   5. exec's `node dist/index.js` in the FOREGROUND so init owns the pid and
+#      restarts the whole thing (re-ensuring pg/redis) if the daemon dies.
+#
+# dist/index.js is UNTOUCHED — its line 2 must stay require('./dns-fix.js')
+# (the DoH shim; Android netd DNS isn't reachable from Node). We only launch it.
+# =============================================================================
+
+set -u
+
+# ---------------------------------------------------------------------------
+# RUNTIME LOCATION — configurable. Defaults to the CURRENT Termux path for
+# continuity with today's devices (Node + Postgres + Redis + the mikedaemon
+# checkout all live under the Termux prefix). This lets the init service work on
+# a layered/Termux-provisioned device immediately.
+#
+# TODO (runtime-packaging follow-up — the real hardening endgame, see README):
+#   The hardened ROM must BAKE the runtime (Node + Postgres + Redis binaries +
+#   the mikedaemon `dist/`) into the image, or lay it down as a first-boot
+#   /data/mikeos payload, so there is NO Termux dependency. When that lands,
+#   repoint the vars below at the baked locations (e.g. MIKEOS_RUNTIME=/system/
+#   opt/mikeos or /data/mikeos). This launcher + the absolute-dir hardening is
+#   the deliverable NOW; packaging the runtime natively is the next step.
+# ---------------------------------------------------------------------------
+MIKEOS_RUNTIME="${MIKEOS_RUNTIME:-/data/data/com.termux/files}"
+
+# Prefix that holds the bin/lib of the runtime (Termux layout: $RUNTIME/usr).
+MIKEOS_PREFIX="${MIKEOS_PREFIX:-$MIKEOS_RUNTIME/usr}"
+
+# Where the mikedaemon checkout (with dist/index.js) lives. On Termux devices it
+# is under the Termux home; override when baked into the image.
+MIKEOS_DAEMON_DIR="${MIKEOS_DAEMON_DIR:-$MIKEOS_RUNTIME/home/mikedaemon}"
+
+# ---------------------------------------------------------------------------
+# Absolute data root — the whole point. NEVER relative, NEVER cwd-dependent.
+# ---------------------------------------------------------------------------
+MIKEOS_DATA=/data/mikeos
+PGDATA="$MIKEOS_DATA/pg"
+REDISDIR="$MIKEOS_DATA/redis"
+
+# ---------------------------------------------------------------------------
+# Environment — absolute, writable.
+# ---------------------------------------------------------------------------
+export HOME="$MIKEOS_DATA/daemon"        # daemon's writable HOME (logs, caches)
+export TMPDIR="$MIKEOS_DATA/run"         # writable tmp (no dependence on /tmp)
+export PREFIX="$MIKEOS_PREFIX"
+export PATH="$MIKEOS_PREFIX/bin:/system/bin:/vendor/bin"
+export LD_LIBRARY_PATH="$MIKEOS_PREFIX/lib:/system/lib64:/vendor/lib64"
+export LANG=en_US.UTF-8
+export REDIS_URL="redis://127.0.0.1:6379"
+# GPU brain endpoint (same as start-daemon.sh). Baked here for continuity; the
+# ROM may instead inject this via a system property / a /data/mikeos/env file.
+export OLLAMA_GPU_URL="ollama://mikeos:uB49VXwMDy7R2JE0H7mI@81.8.177.182:11443"
+export NODE_OPTIONS=--max-old-space-size=1024
+
+log() { echo "[mikeos-daemon] $*"; }
+
+# ---------------------------------------------------------------------------
+# 1. Ensure data dirs exist + writable (init's post-fs-data already mkdir's
+#    them; this is belt-and-suspenders so the launcher is safe standalone too).
+# ---------------------------------------------------------------------------
+mkdir -p "$PGDATA" "$REDISDIR" "$HOME" "$TMPDIR" 2>/dev/null || true
+
+# ---------------------------------------------------------------------------
+# 2. Postgres. Postgres refuses to run as root, so — as today — run it as the
+#    datastore uid. On Termux devices that is 10151 (the Termux app uid). This
+#    is a KNOWN-UNVERIFIED assumption on the hardened ROM: once the runtime is
+#    baked, pick a dedicated system uid and chown $PGDATA to it. initdb once if
+#    the data dir is empty.
+#
+#    NOTE: on the hardened image with a baked runtime you would run pg/redis
+#    directly (no `su`); the `su`+uid dance below is purely for the Termux-
+#    layered continuity path.
+# ---------------------------------------------------------------------------
+PG_UID="${MIKEOS_PG_UID:-10151}"
+SU=/system/bin/su
+[ -x /product/bin/su ] && SU=/product/bin/su
+
+pg_env="export PREFIX=$MIKEOS_PREFIX HOME=$HOME PATH=$PATH LD_LIBRARY_PATH=$LD_LIBRARY_PATH TMPDIR=$TMPDIR"
+
+# chown the pg data dir to the datastore uid so it can write it.
+chown -R "$PG_UID":"$PG_UID" "$PGDATA" 2>/dev/null || true
+
+if [ -x "$SU" ]; then
+    # initdb if empty (no PG_VERSION marker), then start if not already up.
+    "$SU" "$PG_UID" -c "$pg_env; \
+        [ -f $PGDATA/PG_VERSION ] || initdb -D $PGDATA >/dev/null 2>&1; \
+        pg_ctl -D $PGDATA status >/dev/null 2>&1 || \
+          pg_ctl -D $PGDATA -l $HOME/pg.log -w -t 30 start >/dev/null 2>&1" \
+        || log "WARN: postgres start returned non-zero (continuing)"
+else
+    log "WARN: no su binary at $SU — skipping Postgres bring-up (runtime not baked?)"
+fi
+
+# ---------------------------------------------------------------------------
+# 3. Redis — ABSOLUTE writable dir, never block writes on a bgsave failure.
+#    THIS is the fix the whole daemon-as-system effort exists for: no relative
+#    `dir ./`, no dependence on cwd. Redis here is an ephemeral cache/bus
+#    (durable data is in Postgres), so stop-writes-on-bgsave-error no is safe.
+#    Run as the datastore uid too (redis is happy as non-root; keeps parity
+#    with pg ownership of any shared files).
+# ---------------------------------------------------------------------------
+if [ -x "$SU" ]; then
+    chown -R "$PG_UID":"$PG_UID" "$REDISDIR" 2>/dev/null || true
+    "$SU" "$PG_UID" -c "$pg_env; \
+        redis-cli -p 6379 ping >/dev/null 2>&1 || \
+          redis-server --daemonize yes --port 6379 \
+            --dir $REDISDIR \
+            --stop-writes-on-bgsave-error no >/dev/null 2>&1" \
+        || log "WARN: redis start returned non-zero (continuing)"
+else
+    # Runtime baked / running directly as root: launch redis in-process style.
+    redis-cli -p 6379 ping >/dev/null 2>&1 || \
+      redis-server --daemonize yes --port 6379 \
+        --dir "$REDISDIR" \
+        --stop-writes-on-bgsave-error no >/dev/null 2>&1 || \
+        log "WARN: redis start returned non-zero (continuing)"
+fi
+
+# Give the datastores a moment to accept connections (matches start-daemon.sh).
+sleep 2
+
+# ---------------------------------------------------------------------------
+# 4. exec the daemon in the FOREGROUND. `exec` replaces this shell so init's
+#    supervised pid IS node; when node exits, init restarts the service, which
+#    re-runs this script and re-ensures pg/redis. dist/index.js is untouched
+#    (line 2 stays require('./dns-fix.js')).
+# ---------------------------------------------------------------------------
+cd "$MIKEOS_DAEMON_DIR" 2>/dev/null || {
+    log "FATAL: daemon dir $MIKEOS_DAEMON_DIR not found"; exit 1; }
+
+log "starting node dist/index.js (HOME=$HOME TMPDIR=$TMPDIR runtime=$MIKEOS_RUNTIME)"
+exec node "$MIKEOS_DAEMON_DIR/dist/index.js"

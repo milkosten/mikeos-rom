@@ -89,8 +89,18 @@ PRODUCT_PACKAGES += \
 # PRODUCT_COPY_FILES += \
 #     vendor/mikeos/prebuilt/media/mikeos_wallpaper.png:$(TARGET_COPY_OUT_PRODUCT)/media/mikeos_wallpaper.png
 
-# --- Milestone 3.2 (DEFERRED): daemon-as-system -------------------------------
-# The on-device MikeOS daemon (Node + Postgres + Redis + mikedaemon as an init
-# service, sepolicy, DoH shim) is NOT part of this milestone. It needs iterative
-# on-device bring-up. In the interim the existing Termux/Magisk daemon runs fine
-# on this ROM. When 3.2 lands, its packages/init.rc/sepolicy get added here.
+# --- Milestone 3.2: daemon-as-system ------------------------------------------
+# The on-device MikeOS daemon (Node + Postgres + Redis + mikedaemon) is baked in
+# as a real Android init service instead of the fragile Termux/Magisk bash loop:
+# init supervises it, restarts it on crash, and absolute /data/mikeos data dirs
+# kill the read-only-cwd Redis `dir ./` bug class. Install rules (init .rc +
+# executable launcher + sepolicy) live in a SEPARATE, easy-to-toggle mk. This is
+# a FIRST-DRAFT overlay to be validated on the NEXT ROM build — see
+# vendor/mikeos/system/README.md for the KNOWN-UNVERIFIED list. To disable the
+# whole layer, comment out the single inherit line below.
+#
+# NOTE (runtime packaging TODO): the launcher still defaults to the Termux
+# runtime path for continuity; baking Node+Postgres+Redis+dist natively into the
+# image is the documented follow-up. The init-service + absolute-dirs hardening
+# is the deliverable here. The DoH shim (dns-fix.js) is unchanged.
+$(call inherit-product-if-exists, vendor/mikeos/system/system-daemon.mk)

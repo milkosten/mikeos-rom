@@ -1,0 +1,57 @@
+# =============================================================================
+# MikeOS daemon — Android init service (daemon-as-system, Milestone 3.2 / Part A)
+#
+# Replaces the fragile Magisk service.d bash loop (start-daemon.sh) that started
+# the on-device MikeOS daemon. Here `init` owns the daemon: it starts it at boot,
+# supervises it, restarts it on crash, and confines it with sepolicy. Absolute,
+# baked data dirs (/data/mikeos/**) eliminate the Redis `dir ./` / read-only-cwd
+# bug class by construction (see mikedaemon/deploy/README.md for that incident).
+#
+# Installed to /vendor/etc/init/mikedaemon.rc (Android auto-imports every .rc in
+# /vendor/etc/init at boot — no explicit `import` needed).
+#
+# ---------------------------------------------------------------------------
+# KNOWN-UNVERIFIED (resolve on the NEXT ROM build — see ../README.md):
+#   * seclabel u:r:mikedaemon:s0 — the domain must exist in sepolicy AND the
+#     exec file must be labeled mikeos-daemon_exec, or init refuses to start the
+#     service (falls back / logs an avc). Verified only once sepolicy compiles.
+#   * `class main` ordering — starts with the main class at boot. If the daemon
+#     must wait for /data to be decrypted, post-fs-data (used below to mkdir) is
+#     the correct trigger; the actual `start` is issued there after the dirs
+#     exist. Confirm ordering vs. FBE (file-based-encryption) unlock on device.
+#   * group list (root system inet net_raw) — net_raw is for the loopback TLS
+#     bind / raw networking the daemon does; trim once avc/permission needs are
+#     known. `inet` is required for socket() at all.
+#   * oom_score_adjust -800 — keeps the daemon well away from the LMK. Valid
+#     range is -1000..1000; -800 mirrors other critical native services.
+# ---------------------------------------------------------------------------
+
+service mikeos-daemon /system/bin/mikeos-daemon
+    # NOT oneshot: init restarts it whenever it exits (self-heal on crash).
+    class main
+    # The launcher execs `node dist/index.js` in the foreground so THIS pid is
+    # the daemon; on death init restarts the service (re-ensuring pg/redis).
+    user root
+    group root system inet net_raw
+    # sepolicy domain — see sepolicy/mikedaemon.te. MUST match a real domain.
+    seclabel u:r:mikedaemon:s0
+    # Keep the brain alive under memory pressure (every app depends on it).
+    oom_score_adjust -800
+    # Do not start automatically here — post-fs-data starts it AFTER the data
+    # dirs are created (so the very first boot can't race the mkdir below).
+    disabled
+
+# Create the absolute, always-writable data root BEFORE starting the daemon.
+# post-fs-data runs after /data is mounted+decrypted, which is where /data/mikeos
+# must live. Modes are permissive-ish first-draft (0771); tighten with sepolicy.
+on post-fs-data
+    mkdir /data/mikeos 0771 root system
+    mkdir /data/mikeos/pg 0700 root system
+    mkdir /data/mikeos/redis 0771 root system
+    mkdir /data/mikeos/daemon 0771 root system
+    mkdir /data/mikeos/run 0771 root system
+    # restorecon so the mikeos_data_file label (file_contexts) is applied to the
+    # freshly-created dirs even before the next full relabel.
+    restorecon_recursive /data/mikeos
+    # Now that the data root exists + is labeled, launch the supervised daemon.
+    start mikeos-daemon

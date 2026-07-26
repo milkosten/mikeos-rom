@@ -1,0 +1,20 @@
+# =============================================================================
+# MikeOS daemon-as-system — SELinux file_contexts (first draft).
+#
+# Labels the daemon's launcher (so init can transition into the mikedaemon
+# domain) and the daemon's data tree (so the domain may manage it).
+#
+# KNOWN-UNVERIFIED (see ../README.md):
+#   * The launcher path. We install it to /system/bin/mikeos-daemon (per the
+#     spec). If a build constraint moves it to /vendor/bin, update this regex to
+#     /vendor/bin/mikeos-daemon and keep the type an *_exec vendor_file_type.
+#   * /data/mikeos labeling — regex must win over the generic /data(/.*)? rule;
+#     more-specific paths take precedence in file_contexts, so this is fine, but
+#     verify with `ls -Z /data/mikeos` on the first boot.
+# =============================================================================
+
+# The init-launched hardened launcher -> exec type (drives the domain transition).
+/system/bin/mikeos-daemon    u:object_r:mikedaemon_exec:s0
+
+# The daemon's absolute data root and everything under it.
+/data/mikeos(/.*)?           u:object_r:mikeos_data_file:s0
