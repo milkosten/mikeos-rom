@@ -1,0 +1,13 @@
+# Never commit signing keys — losing/leaking the release key is fatal.
+*.pk8
+*.x509.pem
+mikeos-keys/
+keys/*.pk8
+keys/*.x509.pem
+
+# Build artifacts
+out/
+*.log
+
+# Scratch
+*.tmp

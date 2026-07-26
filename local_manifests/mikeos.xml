@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    MikeOS ROM — repo local manifest.
+
+    Place this file at .repo/local_manifests/mikeos.xml in your LineageOS 23.2
+    source checkout (see README build runbook), then `repo sync`.
+
+    What it does: adds the proprietary Google vendor blobs for tegu (Pixel 9a)
+    from TheMuppets, which are NOT part of the open LineageOS manifest. These
+    are the closed-source hardware bits (graphics, camera HAL, modem, etc.) the
+    device needs to boot — they are firmware, NOT Google apps, and do not make
+    the ROM "Googled".
+
+    NOTE — vendor/mikeos is deliberately NOT a project here. This repo
+    (mikeos-rom) is cloned/symlinked directly into the tree at
+    /srv/src/vendor/mikeos by build-tegu.sh; it is not fetched by repo. Keeping
+    it out of the manifest means `repo sync` never touches or clobbers it.
+
+    KNOWN-UNVERIFIED (see README):
+      * Canonical blob route is `breakfast tegu`, which makes roomservice fetch
+        the LineageOS device/kernel trees, and the device tree's extract-utils /
+        proprietary-files.txt then either pulls blobs from a connected/stock
+        image OR from TheMuppets. If breakfast already wires the tegu vendor
+        (many devices ship a matching TheMuppets entry in the default Lineage
+        manifest / roomservice), this explicit project may be redundant or even
+        conflict — in that case remove it. Verify the exact `name` and `path`
+        against TheMuppets/proprietary_vendor_google @ lineage-23.2:
+          - repo name : TheMuppets/proprietary_vendor_google
+          - for tegu the blobs live under vendor/google/tegu
+        Adjust `path` if the branch lays them out differently.
+-->
+<manifest>
+
+  <!-- Proprietary Google hardware blobs for tegu (Pixel 9a). -->
+  <project
+      name="TheMuppets/proprietary_vendor_google"
+      path="vendor/google"
+      remote="github"
+      revision="lineage-23.2" />
+
+</manifest>

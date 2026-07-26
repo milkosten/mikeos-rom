@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    MikeOS ROM — framework config overlay.
+
+    This is a RUNTIME/BUILD resource overlay against
+    frameworks/base/core/res/res/values/config.xml. It is applied because
+    common.mk adds `vendor/mikeos/overlay` to PRODUCT_PACKAGE_OVERLAYS, so at
+    build time aapt merges these values on top of the framework defaults.
+
+    Purpose: make MikeOS Home the default HOME role holder out of the box.
+    LineageOS ships Trebuchet as its launcher; by overriding config_defaultHome
+    the RoleManager assigns the HOME role to com.mikeos.launcher on first boot,
+    so there is NO "pick a launcher" chooser dialog. Trebuchet stays installed
+    (still selectable in Settings > Apps > Default apps) but is not default.
+
+    KNOWN-UNVERIFIED (see README): the exact resource name/type. In AOSP this is
+    a <string> named `config_defaultHome` holding a flattened ComponentName
+    "pkg/cls". Verify against the lineage-23.2 tree:
+        frameworks/base/core/res/res/values/config.xml
+    If Lineage/Google already sets a default-home config for tegu, this overlay
+    value wins (overlays override, last-writer). If the framework instead uses
+    a different mechanism on Android 16 (e.g. a role-config resource array),
+    adjust the name/type here to match the base resource exactly — an overlay
+    that names a non-existent resource is silently dropped by aapt.
+
+    The launcher Activity is com.mikeos.launcher/com.mikeos.launcher.MainActivity
+    — CONFIRM the real launcher-intent Activity class from the shipped
+    com.mikeos.launcher APK manifest (the one with CATEGORY_HOME +
+    CATEGORY_DEFAULT). If it differs, fix the class name below.
+-->
+<resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+
+    <!-- The default home Activity the RoleManager grants the HOME role to. -->
+    <string name="config_defaultHome" translatable="false"
+        >com.mikeos.launcher/com.mikeos.launcher.MainActivity</string>
+
+</resources>

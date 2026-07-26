@@ -1,0 +1,102 @@
+#!/usr/bin/env bash
+#
+# build-tegu.sh — build the MikeOS ROM for tegu (Pixel 9a).
+#
+# RUN THIS INSIDE THE BUILD CONTAINER, from the source root (default /srv/src),
+# where the LineageOS 23.2 tree has already been `repo init`+`repo sync`'d.
+# It does NOT sync sources (a sync is expensive and runs separately).
+#
+# It is safe to re-run.
+#
+# Prereqs (done once, see README runbook):
+#   * repo init -u https://github.com/LineageOS/android.git -b lineage-23.2
+#   * .repo/local_manifests/mikeos.xml in place (from this repo)
+#   * repo sync
+#   * this repo cloned/symlinked to $SRC_ROOT/vendor/mikeos
+#   * tegu proprietary blobs extracted (see the BLOBS note below)
+#
+# Usage:
+#   SRC_ROOT=/srv/src ./build-tegu.sh
+#   VARIANT=user ./build-tegu.sh          # release variant (default: userdebug)
+
+set -euo pipefail
+
+SRC_ROOT="${SRC_ROOT:-/srv/src}"
+VARIANT="${VARIANT:-userdebug}"          # userdebug | user
+JOBS="${JOBS:-$(nproc)}"
+
+banner() { printf '\n========== %s ==========\n' "$*"; }
+
+banner "MikeOS ROM build — tegu (Pixel 9a) — variant=${VARIANT}"
+echo "SRC_ROOT=${SRC_ROOT}  JOBS=${JOBS}"
+
+cd "${SRC_ROOT}"
+
+# --- ccache (big win on incremental builds) -----------------------------------
+export USE_CCACHE=1
+export CCACHE_EXEC="${CCACHE_EXEC:-$(command -v ccache || true)}"
+export CCACHE_DIR="${CCACHE_DIR:-${SRC_ROOT}/.ccache}"
+if [ -n "${CCACHE_EXEC}" ]; then
+  ccache -M "${CCACHE_MAXSIZE:-100G}" >/dev/null 2>&1 || true
+  echo "ccache: ${CCACHE_EXEC}  dir=${CCACHE_DIR}"
+else
+  echo "ccache: NOT found — build will be slower (set CCACHE_EXEC to enable)."
+fi
+
+# --- Envsetup -----------------------------------------------------------------
+banner "source build/envsetup.sh"
+# shellcheck disable=SC1091
+source build/envsetup.sh
+
+# --- breakfast: pull the tegu device/kernel/vendor trees via roomservice ------
+# breakfast on a bare device name uses Lineage's default product; it fetches
+# LineageOS/android_device_google_tegu (+ deps) into device/google/tegu and
+# resolves the dependency manifest. Run it once so those trees exist before we
+# lunch our own product.
+banner "breakfast tegu (fetch device trees)"
+breakfast tegu || {
+  echo "breakfast tegu failed — ensure lineage-23.2 is synced and the device is supported." >&2
+  exit 1
+}
+
+# --- Ensure vendor/mikeos is present ------------------------------------------
+banner "check vendor/mikeos overlay present"
+if [ ! -f "${SRC_ROOT}/vendor/mikeos/products/mikeos_tegu.mk" ]; then
+  echo "ERROR: ${SRC_ROOT}/vendor/mikeos is missing." >&2
+  echo "       Clone this repo into it, e.g.:" >&2
+  echo "         git clone <mikeos-rom> ${SRC_ROOT}/vendor/mikeos" >&2
+  echo "       (or symlink: ln -s /path/to/mikeos-rom/vendor/mikeos ${SRC_ROOT}/vendor/mikeos)" >&2
+  exit 1
+fi
+echo "OK: vendor/mikeos/products/mikeos_tegu.mk found"
+
+# --- BLOBS note ---------------------------------------------------------------
+# The Google proprietary blobs for tegu must be present under vendor/google/tegu
+# before a full build links. Two supported routes:
+#   1. TheMuppets (recommended, unattended): provided by local_manifests/
+#      mikeos.xml -> repo sync pulls vendor/google. Nothing else to do.
+#   2. Extract from a stock image: with a stock tegu factory/OTA image or the
+#      device connected in adb, run the device tree's extractor:
+#         cd device/google/tegu && ./extract-files.sh <path-to-stock-or-adb>
+#      This regenerates vendor/google/tegu from proprietary-files.txt.
+# If the link step errors on missing tegu blobs, fix this first.
+banner "blobs check (vendor/google/tegu)"
+if [ -d "${SRC_ROOT}/vendor/google/tegu" ]; then
+  echo "OK: vendor/google/tegu present"
+else
+  echo "WARN: vendor/google/tegu not found — see the BLOBS note in this script." >&2
+  echo "      Continuing; the build will fail at link if blobs are truly missing." >&2
+fi
+
+# --- lunch our product + build ------------------------------------------------
+banner "lunch mikeos_tegu-${VARIANT}"
+lunch "mikeos_tegu-${VARIANT}"
+
+banner "brunch mikeos_tegu (this takes a long time)"
+# brunch = lunch + build the ROM zip target. Using it keeps ccache/jobs env.
+# (Equivalent: `mka bacon` after lunch.)
+brunch "mikeos_tegu-${VARIANT}" -j"${JOBS}"
+
+banner "BUILD DONE"
+echo "Output ROM zip: ${SRC_ROOT}/out/target/product/tegu/*.zip"
+echo "For a SIGNED release build, do NOT flash this dev zip — run scripts/sign-tegu.sh"
