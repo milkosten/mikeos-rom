@@ -35,7 +35,7 @@ LOCAL_SRC_FILES := bin/mikeos-daemon
 LOCAL_PRODUCT_MODULE := true
 LOCAL_MODULE_PATH := $(TARGET_OUT_PRODUCT)/bin
 # The launcher is a POSIX-sh SCRIPT, not an ELF binary. BUILD_PREBUILT of an
-# EXECUTABLES module runs check_elf_file by default, which fails the build with
-# "must have a valid ELF magic word". Skip the ELF check for this script module.
+# EXECUTABLES module runs check_elf_file by default, which fails with
+# "must have a valid ELF magic word". Skip that check for this script module.
 LOCAL_CHECK_ELF_FILES := false
 include $(BUILD_PREBUILT)

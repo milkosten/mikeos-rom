@@ -30,28 +30,13 @@
 #     platform requires a typed port (portcon), add one and reference it.
 # =============================================================================
 
-# mikedaemon is a CORE domain, not a vendor domain. Its launcher lives on
-# /product and its data on /data/mikeos (both are on the "core/system" side of
-# Treble), so the domain MUST be declared in system_ext/product private sepolicy
-# (see system-daemon.mk: SYSTEM_EXT_PRIVATE_SEPOLICY_DIRS) and carry the
-# `coredomain` attribute. This resolves the Treble cross-partition neverallows:
-#   * a VENDOR domain may not entrypoint a /product exec, nor manage
-#     core_data_file_type files (domain.te vendor-vs-core neverallows) — those
-#     were the original build failures.
-# As a coredomain the entrypoint + core-data rules are the ones that APPLY, and
-# they are satisfied below.
+# The launcher lives on the PRODUCT partition (/product/bin/mikeos-daemon), not
+# vendor — so its exec type is a plain exec_type/file_type (NOT vendor_file_type;
+# labelling a /product file as vendor_file_type would be a neverallow violation).
 type mikedaemon, domain, coredomain;
-
-# The launcher lives on the PRODUCT partition (/product/bin/mikeos-daemon).
-# It MUST be `system_file_type`: the entrypoint neverallow (domain.te) only lets
-# a coredomain entrypoint files that are system_file_type (or postinstall_file).
-# /product is on the system side of Treble, so system_file_type is correct here.
 type mikedaemon_exec, exec_type, file_type, system_file_type;
 
 # Type for the daemon's data tree /data/mikeos/** (labeled via file_contexts).
-# It MUST be `core_data_file_type`: a coredomain may only manage data_file_type
-# files that are core_data_file_type (or app_data_file_type) — the inverse of
-# the vendor rule. /data/mikeos is core (not /data/vendor), so this is correct.
 type mikeos_data_file, file_type, data_file_type, core_data_file_type;
 
 # init transitions to this domain when it execs a mikedaemon_exec file.
@@ -86,9 +71,5 @@ allow mikedaemon self:udp_socket { create_socket_perms };
 # ---- Talk to system services the daemon uses (dumpsys location, etc.) --------
 # The daemon shells out (curl, dumpsys, su for device actions). These are
 # intentionally coarse for the first draft — tighten from real denials.
-# NOTE: `dac_override` is a hard neverallow (domain.te) for any non-exempt
-# domain and CANNOT be granted here — it was dropped. Being permissive, the
-# domain will still function; any real dac_override need shows up as an avc to
-# fold in later the correct way (fix ownership/modes, not the capability).
 allow mikedaemon self:capability { setuid setgid net_raw net_admin };
 allow mikedaemon self:global_capability_class_set { setuid setgid net_raw };
