@@ -55,3 +55,22 @@ and data at `/data/mikeos`; only the domain's *partition classification* in poli
 install path. No `/vendor` move was needed.
 
 After the fix, the full `mka bacon` was relaunched detached on the build box.
+
+## 2026-07-26 — check_elf_files failure on the mikeos-daemon launcher (next blocker)
+
+With sepolicy fixed, the full build sailed past sepolicy and reached **90% (image
+packaging)**, then failed at:
+
+```
+FAILED: out/target/product/tegu/obj/EXECUTABLES/mikeos-daemon_intermediates/check_elf_files.timestamp
+vendor/.mikeos-rom/vendor/mikeos/system/bin/mikeos-daemon: error: File "..." must have a valid ELF magic word.
+```
+
+**Cause.** The launcher `mikeos-daemon` is a **POSIX-sh script**, but it ships as a
+`BUILD_PREBUILT` module with `LOCAL_MODULE_CLASS := EXECUTABLES`, and that runs `check_elf_file`
+by default — which requires a real ELF binary.
+
+**Fix.** `vendor/mikeos/system/Android.mk`: add **`LOCAL_CHECK_ELF_FILES := false`** before
+`include $(BUILD_PREBUILT)` (the check's own note recommends exactly this for non-ELF files).
+Install path/partition unchanged. Build resumed (incremental — only the failed target + image/zip
+re-run).
