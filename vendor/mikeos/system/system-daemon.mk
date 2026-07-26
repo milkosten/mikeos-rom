@@ -8,7 +8,7 @@
 # This wires three things into the ROM (the runtime PAYLOAD is in runtime.mk):
 #   1. the init service .rc               -> /vendor/etc/init/mikedaemon.rc
 #   2. the hardened launcher (executable) -> /PRODUCT/bin/mikeos-daemon
-#   3. the mikedaemon sepolicy dir        -> BOARD_VENDOR_SEPOLICY_DIRS
+#   3. the mikedaemon sepolicy dir        -> SYSTEM_EXT_PRIVATE_SEPOLICY_DIRS
 #
 # PARTITIONS: everything MikeOS lands on product/ or vendor/ — NEVER /system/*.
 # tegu (Pixel) enforces PRODUCT_ARTIFACT_PATH_REQUIREMENT: an overlay artifact
@@ -22,10 +22,12 @@
 #   * The .rc goes to the VENDOR partition's etc/init (init auto-imports
 #     /vendor/etc/init/*.rc); the launcher + payload go to PRODUCT. Confirm all
 #     three land + the .rc is auto-imported on first boot.
-#   * BOARD_VENDOR_SEPOLICY_DIRS is a BoardConfig-time var. Setting it from a
-#     product .mk works in current AOSP/LineageOS, but if the sepolicy dir is
-#     not picked up, move this one line into device/google/tegu/.../BoardConfig.mk
-#     (that's the canonical home for BOARD_* vars).
+#   * The sepolicy dir is added via SYSTEM_EXT_PRIVATE_SEPOLICY_DIRS (not
+#     BOARD_VENDOR_SEPOLICY_DIRS). mikedaemon is a CORE domain (its launcher is
+#     on /product, its data on /data/mikeos — both core-side of Treble), so it
+#     must be built as system_ext/product private policy and carry `coredomain`.
+#     A VENDOR domain hit Treble neverallows (cross-partition entrypoint + no
+#     access to core_data_file_type); a coredomain declared here does not.
 # ---------------------------------------------------------------------------
 
 # --- 1. init service .rc (copy-file is fine; no +x needed for a .rc) ----------
@@ -39,5 +41,9 @@ PRODUCT_COPY_FILES += \
 PRODUCT_PACKAGES += \
     mikeos-daemon
 
-# --- 3. sepolicy: add the mikedaemon domain to the vendor sepolicy build ------
-BOARD_VENDOR_SEPOLICY_DIRS += vendor/mikeos/system/sepolicy
+# --- 3. sepolicy: add the mikedaemon domain to the system_ext private policy ---
+# mikedaemon is a coredomain (see sepolicy/mikedaemon.te + the note above), so
+# its policy is built as system_ext PRIVATE policy, NOT vendor policy. This is
+# what makes the domain a coredomain and clears the Treble cross-partition
+# neverallows (entrypoint of a /product exec + management of /data/mikeos).
+SYSTEM_EXT_PRIVATE_SEPOLICY_DIRS += vendor/mikeos/system/sepolicy
