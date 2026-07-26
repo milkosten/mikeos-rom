@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    MikeOS ROM — privileged-permission allowlist for the Setup Wizard.
+
+    com.mikeos.setup is installed to /product/priv-app (see prebuilt/apps/Android.mk).
+    On Android 16 a privileged app that requests a signature|privileged permission is
+    DENIED at boot unless it is allowlisted here, and PRODUCT_ENFORCE_ARTIFACT... /
+    the priv-app permission enforcement will otherwise brick the boot with a
+    "Signature|privileged permissions not in privapp-permissions allowlist" fatal.
+
+    WRITE_SECURE_SETTINGS lets the wizard mark first-boot provisioning complete
+    (Settings.Global.DEVICE_PROVISIONED / Settings.Secure.USER_SETUP_COMPLETE) when it
+    finishes — without which the framework never switches from the setup wizard to the
+    real launcher (MikeOS Home) and the Home button stays dead. MikeSetup replaces
+    LineageSetupWizard (removed via PRODUCT_PACKAGES_REMOVE).
+
+    Installed to /product/etc/permissions/ by common.mk (PRODUCT_COPY_FILES).
+-->
+<permissions>
+    <privapp-permissions package="com.mikeos.setup">
+        <permission name="android.permission.WRITE_SECURE_SETTINGS"/>
+    </privapp-permissions>
+</permissions>

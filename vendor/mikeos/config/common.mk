@@ -82,12 +82,34 @@ PRODUCT_PACKAGES += \
     MikeVoice \
     MikeWifi
 
-# --- Optional wallpaper -------------------------------------------------------
-# If a default MikeOS wallpaper is added at vendor/mikeos/prebuilt/media/
-# mikeos_wallpaper.png, uncomment to ship it. Left off for now (trivial to add;
-# MikeOS Home may set its own wallpaper anyway).
-# PRODUCT_COPY_FILES += \
-#     vendor/mikeos/prebuilt/media/mikeos_wallpaper.png:$(TARGET_COPY_OUT_PRODUCT)/media/mikeos_wallpaper.png
+# --- Remove LineageOS's launcher + setup wizard (MikeOS replaces both) ---------
+# LineageOS ships Trebuchet (module Launcher3QuickStep, package com.android.launcher3)
+# and its own SetupWizard (module LineageSetupWizard, "Welcome to LineageOS"). Both
+# come in via the inherited lineage_tegu product. We ship our own:
+#   * com.mikeos.launcher (MikeHome) is the ONLY launcher -> removing Trebuchet means
+#     no "Select home app" chooser on first boot (one HOME candidate auto-holds the role).
+#   * com.mikeos.setup (MikeSetup) is the setup wizard -> removing LineageSetupWizard
+#     kills the "Welcome to LineageOS" flow so MikeSetup owns first boot (it declares
+#     CATEGORY_SETUP_WIZARD + HOME and marks the device provisioned when done).
+# PRODUCT_PACKAGES_REMOVE strips them from the product package set even though inherited.
+PRODUCT_PACKAGES_REMOVE += \
+    Launcher3QuickStep \
+    LineageSetupWizard
+
+# --- MikeSetup privileged-permission allowlist --------------------------------
+# MikeSetup is a /product/priv-app; it requests WRITE_SECURE_SETTINGS (to flip
+# device_provisioned / user_setup_complete on completion). Android 16 fatally
+# refuses a priv-app's signature|privileged permission unless it is allowlisted.
+PRODUCT_COPY_FILES += \
+    vendor/mikeos/etc/permissions/privapp-permissions-com.mikeos.setup.xml:$(TARGET_COPY_OUT_PRODUCT)/etc/permissions/privapp-permissions-com.mikeos.setup.xml
+
+# --- Default wallpaper --------------------------------------------------------
+# A branded MikeOS wallpaper (violet sky + wordmark) so the home/lock background
+# "says MikeOS" out of the box. Shipped as a framework resource overlay against
+# com.android.internal default_wallpaper (via PRODUCT_PACKAGE_OVERLAYS above):
+#   vendor/mikeos/overlay/frameworks/base/core/res/res/drawable-nodpi/default_wallpaper.png
+# (Overlaying the framework default is the standard ROM way to set a stock wallpaper;
+# the launcher also paints its own violet-sky + wordmark face on top.)
 
 # --- Milestone 3.2: daemon-as-system ------------------------------------------
 # The on-device MikeOS daemon (Node + Postgres + Redis + mikedaemon) is baked in
