@@ -1,95 +1,66 @@
 #!/system/bin/sh
 # =============================================================================
-# mikeos-daemon — hardened MikeOS daemon launcher (daemon-as-system, Part A)
+# mikeos-daemon — MikeOS daemon launcher (daemon-as-system).
 #
-# Installed to /product/bin/mikeos-daemon and run by the init service
-# `mikeos-daemon` (vendor/mikeos/system/init/mikedaemon.rc), under root.
+# Installed to /product/bin/mikeos-daemon, run by the init service `mikeos-daemon`
+# (vendor/mikeos/system/init/mikedaemon.rc) under ROOT. Launches the baked,
+# Termux-FREE runtime (Node + Redis + the mikedaemon dist/) shipped at
+# /product/mikeos/mikeos-runtime.tar.gz and extracted once to /data/mikeos/runtime.
 #
-# This launches the BAKED, Termux-FREE MikeOS daemon runtime. The runtime
-# (Node + Postgres + Redis binaries + their shared libs + postgres share/ +
-# the mikedaemon dist/ + node_modules) ships in the ROM as a compressed payload
-# at /product/mikeos/mikeos-runtime.tar.gz and is extracted ONCE on first boot
-# to /data/mikeos/runtime (see mikedaemon.rc `on post-fs-data`, and the
-# belt-and-suspenders extractor in this script). There is NO Termux dependency
-# and NO /data/data/com.termux path anywhere at runtime.
+# DATASTORE = SQLite (node:sqlite), NOT Postgres.
+#   The Pixel 9a (tegu) GKI kernel has SysV IPC compiled out (CONFIG_SYSVIPC is
+#   not set) — no shared memory, no semaphores, no /dev/shm — so PostgreSQL's
+#   postmaster CPU-spins forever at startup and can never run. SQLite is
+#   in-process (one file, zero kernel IPC) so it works on every Android kernel.
+#   The daemon's DB layer was migrated pg -> node:sqlite (src/services/pg-compat.ts);
+#   validated on tegu: schema applies, /api/health = ok, 7743 + 7742 serve.
+#   => NO postgres, NO `su` (we no longer drop to a datastore uid), NO initdb.
 #
-# Everything uses ABSOLUTE, writable paths under /data/mikeos so it does NOT
-# matter what the working directory is when init spawns us (the read-only-`/`
-# Redis bug is impossible by construction). It:
-#   1. extracts the baked runtime to /data/mikeos/runtime if missing (first boot)
-#   2. sets absolute HOME / TMPDIR / PATH / LD_LIBRARY_PATH (Termux-free)
-#   3. ensures the /data/mikeos data dirs exist + are writable
-#   4. starts Postgres (-D /data/mikeos/pg, initdb once if empty)
-#   5. starts Redis (--dir /data/mikeos/redis --stop-writes-on-bgsave-error no)
-#   6. exec's `node dist/index.js` in the FOREGROUND so init owns the pid and
-#      restarts the whole thing (re-ensuring pg/redis) if the daemon dies.
-#
-# dist/index.js is UNTOUCHED — its line 2 must stay require('./dns-fix.js')
-# (the DoH shim; Android netd DNS isn't reachable from Node). We only launch it.
+# Everything uses ABSOLUTE, writable /data/mikeos paths (cwd-independent).
+# dist/index.js is UNTOUCHED except the DB layer — line 2 stays require('./dns-fix.js').
 # =============================================================================
 
 set -u
 
-# ---------------------------------------------------------------------------
-# BAKED RUNTIME LOCATION — Termux-free. The payload ships read-only on the
-# product partition and is extracted to a writable /data path on first boot.
-# ---------------------------------------------------------------------------
 MIKEOS_RUNTIME="${MIKEOS_RUNTIME:-/data/mikeos/runtime}"
 MIKEOS_PAYLOAD="${MIKEOS_PAYLOAD:-/product/mikeos/mikeos-runtime.tar.gz}"
-
-# The bundle is self-contained: bin/ lib/ share/ daemon/ all live under it.
 MIKEOS_PREFIX="${MIKEOS_PREFIX:-$MIKEOS_RUNTIME}"
 MIKEOS_DAEMON_DIR="${MIKEOS_DAEMON_DIR:-$MIKEOS_RUNTIME/daemon}"
 
-# ---------------------------------------------------------------------------
-# Absolute data root — the whole point. NEVER relative, NEVER cwd-dependent.
-# ---------------------------------------------------------------------------
 MIKEOS_DATA=/data/mikeos
-PGDATA="$MIKEOS_DATA/pg"
 REDISDIR="$MIKEOS_DATA/redis"
-
-# ---------------------------------------------------------------------------
-# Datastore uid. Postgres and Redis refuse to run as root; run them as a
-# dedicated non-root uid that owns the data dirs. The bundle binaries are
-# world-executable (0755) so this uid can exec them.
-# ---------------------------------------------------------------------------
-PG_UID="${MIKEOS_PG_UID:-9997}"
-SU=/system/bin/su
-[ -x /product/bin/su ] && SU=/product/bin/su
-[ -x /system/xbin/su ] && SU=/system/xbin/su
 
 # ---------------------------------------------------------------------------
 # Environment — absolute, writable, Termux-FREE.
 # ---------------------------------------------------------------------------
-export HOME="$MIKEOS_DATA/daemon"        # daemon's writable HOME (logs, caches)
-export TMPDIR="$MIKEOS_DATA/run"         # writable tmp (no dependence on /tmp)
+export HOME="$MIKEOS_DATA/daemon"
+export TMPDIR="$MIKEOS_DATA/run"
 export PREFIX="$MIKEOS_PREFIX"
 export PATH="$MIKEOS_PREFIX/bin:/system/bin:/vendor/bin"
 export LD_LIBRARY_PATH="$MIKEOS_PREFIX/lib:/system/lib64:/vendor/lib64"
 export LANG=en_US.UTF-8
+# SQLite datastore (one file). node:sqlite in the baked Node 26 opens it; the
+# daemon's pg-compat adapter reads SQLITE_DB_PATH.
+export SQLITE_DB_PATH="$MIKEOS_DATA/db/mikeos.db"
+# Legacy var some code still reads; harmless sqlite: URL (adapter ignores it).
+export DATABASE_URL="sqlite://$SQLITE_DB_PATH"
 export REDIS_URL="redis://127.0.0.1:6379"
-# GPU brain endpoint. Baked here for continuity; the ROM may instead inject this
-# via a system property / a /data/mikeos/env file.
+# IPC unix socket — MUST be a writable path. /run does not exist on Android
+# (read-only rootfs), which fatally crashed the daemon (mkdir /run/miked ENOENT).
+export IPC_SOCKET_PATH="$MIKEOS_DATA/run/miked.sock"
 export OLLAMA_GPU_URL="ollama://mikeos:uB49VXwMDy7R2JE0H7mI@81.8.177.182:11443"
 export NODE_OPTIONS=--max-old-space-size=1024
 
 log() { echo "[mikeos-daemon] $*"; }
 
 # ---------------------------------------------------------------------------
-# 0. FIRST-BOOT EXTRACTION. If the runtime is not yet unpacked (no node binary),
-#    extract the baked payload once. Guarded by an .extracted marker so a
-#    half-extracted tree (killed mid-untar) is re-done, and a good one is never
-#    re-extracted. init's post-fs-data also does this; belt-and-suspenders here
-#    keeps the launcher correct standalone.
+# 0. FIRST-BOOT EXTRACTION of the baked runtime payload (idempotent).
 # ---------------------------------------------------------------------------
 if [ ! -x "$MIKEOS_RUNTIME/bin/node" ] || [ ! -f "$MIKEOS_RUNTIME/.extracted" ]; then
     if [ -f "$MIKEOS_PAYLOAD" ]; then
         log "first boot: extracting baked runtime $MIKEOS_PAYLOAD -> $MIKEOS_RUNTIME"
         mkdir -p "$MIKEOS_RUNTIME"
-        # toybox tar understands gzip (-z). Extract into the runtime dir.
         if tar -xzf "$MIKEOS_PAYLOAD" -C "$MIKEOS_RUNTIME" 2>/dev/null; then
-            # Make the whole tree world-readable/executable so the datastore uid
-            # can exec the binaries + read the libs/share.
             chmod -R a+rX "$MIKEOS_RUNTIME" 2>/dev/null || true
             touch "$MIKEOS_RUNTIME/.extracted"
             log "runtime extracted OK"
@@ -102,79 +73,34 @@ if [ ! -x "$MIKEOS_RUNTIME/bin/node" ] || [ ! -f "$MIKEOS_RUNTIME/.extracted" ];
 fi
 
 # ---------------------------------------------------------------------------
-# 1. Ensure data dirs exist + writable (init's post-fs-data already mkdir's
-#    them; this is belt-and-suspenders so the launcher is safe standalone too).
+# 1. Termux-shell shim. The baked Node is a Termux build; its child_process
+#    default shell is /data/data/com.termux/files/usr/bin/sh (absent here).
 # ---------------------------------------------------------------------------
-mkdir -p "$PGDATA" "$REDISDIR" "$HOME" "$TMPDIR" 2>/dev/null || true
-chown -R "$PG_UID":"$PG_UID" "$PGDATA" "$REDISDIR" "$TMPDIR" 2>/dev/null || true
-
-# Env string the datastore uid inherits (Termux-free).
-pg_env="export PREFIX=$MIKEOS_PREFIX HOME=$HOME PATH=$PATH LD_LIBRARY_PATH=$LD_LIBRARY_PATH TMPDIR=$TMPDIR LANG=$LANG"
+mkdir -p /data/data/com.termux/files/usr/bin 2>/dev/null || true
+ln -sf /system/bin/sh /data/data/com.termux/files/usr/bin/sh 2>/dev/null || true
 
 # ---------------------------------------------------------------------------
-# 2. Postgres — runs as the datastore uid (refuses root). initdb once if the
-#    data dir is empty (no PG_VERSION), create the mikedaemon role+DB, then
-#    start on port 5433 (the DATABASE_URL the daemon expects). Absolute -D.
-#
-#    NOTE: initdb's auto-tuning probe ("selecting default max_connections") is
-#    SLOW on this platform (a busy syscall loop in postgres --check). We pass an
-#    explicit postgresql.conf-time value is not possible via initdb, so first
-#    boot's initdb may take a few minutes ONCE; subsequent boots skip it (the
-#    data dir persists). This is a one-time first-boot cost.
+# 2. Data dirs (absolute + writable). SQLite db dir + daemon HOME + tmp + redis.
 # ---------------------------------------------------------------------------
-if [ -x "$SU" ]; then
-    if [ ! -f "$PGDATA/PG_VERSION" ]; then
-        log "initdb (one-time, may take a few min on first boot) -D $PGDATA"
-        "$SU" "$PG_UID" -c "$pg_env; initdb -D $PGDATA -U mikeos -E UTF8 --no-locale >/dev/null 2>&1"
-    fi
-    "$SU" "$PG_UID" -c "$pg_env; \
-        pg_ctl -D $PGDATA status >/dev/null 2>&1 || \
-          pg_ctl -D $PGDATA -l $HOME/pg.log -w -t 120 \
-            -o '-p 5433 -c listen_addresses=127.0.0.1 -c unix_socket_directories=$TMPDIR' \
-            start >/dev/null 2>&1" \
-        || log "WARN: postgres start returned non-zero (continuing)"
-    # Ensure the mikedaemon database exists (idempotent; ignores 'already exists').
-    "$SU" "$PG_UID" -c "$pg_env; \
-        psql -h 127.0.0.1 -p 5433 -U mikeos -d postgres -tAc \
-          \"SELECT 1 FROM pg_database WHERE datname='mikedaemon'\" 2>/dev/null | grep -q 1 || \
-          createdb -h 127.0.0.1 -p 5433 -U mikeos mikedaemon >/dev/null 2>&1" \
-        || log "WARN: mikedaemon DB ensure returned non-zero (continuing)"
-else
-    log "WARN: no su binary — cannot run Postgres as non-root (postgres refuses root)"
-fi
+mkdir -p "$MIKEOS_DATA/db" "$REDISDIR" "$HOME" "$TMPDIR" 2>/dev/null || true
+chmod 0771 "$MIKEOS_DATA" 2>/dev/null || true
 
 # ---------------------------------------------------------------------------
-# 3. Redis — ABSOLUTE writable dir, never block writes on a bgsave failure.
-#    THIS is the fix the whole daemon-as-system effort exists for: no relative
-#    `dir ./`, no dependence on cwd. Redis here is an ephemeral cache/bus
-#    (durable data is in Postgres), so stop-writes-on-bgsave-error no is safe.
+# 3. Redis — ephemeral cache/bus (durable data is in SQLite). Absolute dir,
+#    never block writes on a bgsave failure. Runs as the (root) service user.
 # ---------------------------------------------------------------------------
-if [ -x "$SU" ]; then
-    "$SU" "$PG_UID" -c "$pg_env; \
-        redis-cli -p 6379 ping >/dev/null 2>&1 || \
-          redis-server --daemonize yes --port 6379 \
-            --dir $REDISDIR \
-            --stop-writes-on-bgsave-error no >/dev/null 2>&1" \
-        || log "WARN: redis start returned non-zero (continuing)"
-else
-    redis-cli -p 6379 ping >/dev/null 2>&1 || \
-      redis-server --daemonize yes --port 6379 \
-        --dir "$REDISDIR" \
-        --stop-writes-on-bgsave-error no >/dev/null 2>&1 || \
-        log "WARN: redis start returned non-zero (continuing)"
-fi
+redis-cli -p 6379 ping >/dev/null 2>&1 || \
+  redis-server --daemonize yes --port 6379 \
+    --dir "$REDISDIR" \
+    --stop-writes-on-bgsave-error no >/dev/null 2>&1 || \
+    log "WARN: redis start returned non-zero (continuing)"
 
-# Give the datastores a moment to accept connections.
-sleep 2
+sleep 1
 
 # ---------------------------------------------------------------------------
-# 4. exec the daemon in the FOREGROUND. `exec` replaces this shell so init's
-#    supervised pid IS node; when node exits, init restarts the service, which
-#    re-runs this script and re-ensures pg/redis. dist/index.js is untouched
-#    (line 2 stays require('./dns-fix.js')).
+# 4. exec the daemon in the FOREGROUND so init supervises node directly and
+#    restarts it on crash.
 # ---------------------------------------------------------------------------
-cd "$MIKEOS_DAEMON_DIR" 2>/dev/null || {
-    log "FATAL: daemon dir $MIKEOS_DAEMON_DIR not found"; exit 1; }
-
-log "starting node dist/index.js (HOME=$HOME TMPDIR=$TMPDIR runtime=$MIKEOS_RUNTIME)"
+cd "$MIKEOS_DAEMON_DIR" 2>/dev/null || { log "FATAL: daemon dir $MIKEOS_DAEMON_DIR not found"; exit 1; }
+log "starting node dist/index.js (SQLITE_DB_PATH=$SQLITE_DB_PATH IPC=$IPC_SOCKET_PATH)"
 exec node "$MIKEOS_DAEMON_DIR/dist/index.js"
