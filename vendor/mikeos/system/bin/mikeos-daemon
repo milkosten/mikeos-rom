@@ -59,11 +59,9 @@ export MIKEOS_DAEMON_TOKEN=7bdc23451b18b5801036f992b66a872670975d19
 log() { echo "[mikeos-daemon] $*"; }
 
 # ---------------------------------------------------------------------------
-# NAVIGATION: force 3-button nav. Launcher3QuickStep (the gesture/Recents
-# provider) is removed from MikeOS, so gestural navigation has NO handler —
-# users get trapped in full-screen apps (no swipe-home/Recents). The Google
-# vendor blobs default to the gestural overlay, so enforce 3-button on every
-# boot (idempotent; retried in background until system services are up).
+# NAVIGATION: force 3-button nav (backup enforcement — the baked framework
+# overlay config_navBarInteractionMode=0 is primary; QuickStep is back since v13
+# because Android 16 renders ALL nav via the Launcher taskbar). Idempotent.
 # ---------------------------------------------------------------------------
 (
   n=0
@@ -75,6 +73,36 @@ log() { echo "[mikeos-daemon] $*"; }
     fi
     n=$((n+1)); sleep 5
   done
+) &
+
+# ---------------------------------------------------------------------------
+# LOCATION PROVIDER KICK — the fix for "GPS dead on a fresh phone".
+# A freshly-installed (= freshly-wiped) app sits in Android's STOPPED STATE and
+# does NOT receive BOOT_COMPLETED until something launches a component — so the
+# baked com.mikeos.location provider NEVER started on a factory-fresh boot
+# (daemon saw pushReceived=0 forever; the whole GPS chain looked dead).
+# We run as root init, and root MAY send the protected BOOT_COMPLETED broadcast
+# explicitly with --include-stopped-packages (verified live on tegu 2026-07-27):
+# it clears the stopped state, fires the app's BootReceiver, and the provider
+# FGS comes up. Retried until the provider process exists; re-run every boot
+# (idempotent — a running provider just gets a duplicate receiver call).
+# ---------------------------------------------------------------------------
+(
+  n=0
+  until [ $n -ge 40 ]; do
+    if [ "$(getprop sys.boot_completed)" = "1" ]; then
+      am broadcast --include-stopped-packages \
+        -n com.mikeos.location/.BootReceiver \
+        -a android.intent.action.BOOT_COMPLETED >/dev/null 2>&1 || true
+      sleep 4
+      if pidof com.mikeos.location >/dev/null 2>&1; then
+        log "location provider: com.mikeos.location kicked and running"
+        break
+      fi
+    fi
+    n=$((n+1)); sleep 5
+  done
+  pidof com.mikeos.location >/dev/null 2>&1 || log "location provider: NOT running after kick retries"
 ) &
 
 # ---------------------------------------------------------------------------
