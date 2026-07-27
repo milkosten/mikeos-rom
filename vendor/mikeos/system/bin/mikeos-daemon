@@ -133,23 +133,36 @@ log() { echo "[mikeos-daemon] $*"; }
 ) &
 
 # ---------------------------------------------------------------------------
-# 0. FIRST-BOOT EXTRACTION of the baked runtime payload (idempotent).
+# 0. VERSION-AWARE EXTRACTION of the baked runtime payload.
+# Mike's rule: code lives in the SYSTEM PAYLOAD (this tarball), never hand-
+# pushed into data dirs. The old ".extracted"-marker check meant a ROM update
+# NEVER refreshed the extracted daemon (version skew by design). Now the
+# payload carries a RUNTIME_VERSION file; any mismatch with the extracted copy
+# triggers a clean re-extract, so ROM update => daemon update, atomically.
+# State (/data/mikeos/{db,daemon,redis,run}) is untouched by re-extraction.
 # ---------------------------------------------------------------------------
-if [ ! -x "$MIKEOS_RUNTIME/bin/node" ] || [ ! -f "$MIKEOS_RUNTIME/.extracted" ]; then
+PAYLOAD_VER=$(tar -xzOf "$MIKEOS_PAYLOAD" RUNTIME_VERSION 2>/dev/null | head -1)
+CURRENT_VER=$(cat "$MIKEOS_RUNTIME/RUNTIME_VERSION" 2>/dev/null | head -1)
+if [ ! -x "$MIKEOS_RUNTIME/bin/node" ] || [ -z "$CURRENT_VER" ] || \
+   { [ -n "$PAYLOAD_VER" ] && [ "$PAYLOAD_VER" != "$CURRENT_VER" ]; }; then
     if [ -f "$MIKEOS_PAYLOAD" ]; then
-        log "first boot: extracting baked runtime $MIKEOS_PAYLOAD -> $MIKEOS_RUNTIME"
+        log "runtime extract: payload='$PAYLOAD_VER' extracted='$CURRENT_VER' -> (re)extracting"
+        rm -rf "$MIKEOS_RUNTIME"
         mkdir -p "$MIKEOS_RUNTIME"
         if tar -xzf "$MIKEOS_PAYLOAD" -C "$MIKEOS_RUNTIME" 2>/dev/null; then
             chmod -R a+rX "$MIKEOS_RUNTIME" 2>/dev/null || true
             touch "$MIKEOS_RUNTIME/.extracted"
-            log "runtime extracted OK"
+            log "runtime extracted OK (version: ${PAYLOAD_VER:-unstamped})"
         else
             log "FATAL: runtime extraction failed"; exit 1
         fi
     else
         log "FATAL: baked runtime payload not found at $MIKEOS_PAYLOAD"; exit 1
     fi
+else
+    log "runtime up-to-date (version: $CURRENT_VER)"
 fi
+export MIKEOS_RUNTIME_VERSION="${PAYLOAD_VER:-$CURRENT_VER}"
 
 # ---------------------------------------------------------------------------
 # 1. Termux-shell shim. The baked Node is a Termux build; its child_process

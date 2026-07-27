@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  MikeOS system config.
+
+  allow-in-power-save com.mikeos.location — THE GPS root fix (2026-07-27): Android 16
+  refuses FGS starts from a BOOT_COMPLETED receiver ("mAllowStartForeground false"),
+  so the baked location provider's service never started on any boot -> the GNSS
+  engine never got a request -> zero satellite fixes ever ("GPS dead in car").
+  Power-save-allowlisted packages are exempt from background-start restrictions
+  (and doze), which is exactly right for the system's single location provider.
+  Field-proven live on tegu: allowlist -> service up -> HIGH_ACCURACY request ->
+  3,347 applied fixes over a 25km drive.
+-->
+<config>
+    <allow-in-power-save package="com.mikeos.location" />
+</config>
