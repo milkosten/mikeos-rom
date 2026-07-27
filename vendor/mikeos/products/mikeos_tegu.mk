@@ -35,7 +35,6 @@ PRODUCT_MANUFACTURER := Google
 # "pick a launcher" chooser AND a second "Welcome to LineageOS" onboarding after MikeSetup.
 # Declared here so it actually strips them. MikeOS Home + MikeSetup replace both.
 PRODUCT_PACKAGES_REMOVE += \
-    Launcher3QuickStep \
     LineageSetupWizard \
     Provision
 

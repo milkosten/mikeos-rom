@@ -1,12 +1,19 @@
 #!/usr/bin/env python3
-"""Remove LineageOS's Trebuchet launcher + SetupWizard from the product package set.
+"""Remove LineageOS's SetupWizard + AOSP Provision stub from the product package set.
 
 WHY A PATCH (not PRODUCT_PACKAGES_REMOVE): on this tree `PRODUCT_PACKAGES_REMOVE` is a
 no-op — nothing in build/make consumes it — so the modules stayed in PRODUCT_PACKAGES and
-shipped in system_ext, giving a "pick a launcher" chooser AND a second "Welcome to
-LineageOS" onboarding after MikeSetup. We instead strip the module tokens from the Lineage
-config makefiles that add them. Idempotent; re-run each build (a `repo sync` of
-vendor/lineage would revert it). MikeOS Home + MikeSetup replace both.
+shipped, giving a second "Welcome to LineageOS" onboarding after MikeSetup. We instead
+strip the module tokens from the config makefiles that add them. Idempotent; re-run each
+build (a `repo sync` would revert it).
+
+Launcher3QuickStep is deliberately KEPT (as of v13): on Android 16 the navigation bar —
+even the 3-button one on phones — is rendered by Launcher3's Taskbar framework (navbar
+unification; SystemUI just delegates: `mTaskbarDelegate initialized=true navBarCount=0`).
+Removing QuickStep therefore removes ALL navigation (no bar, no gestures, no Recents) and
+the phone is unusable — the v12 "trapped in app" incident. MikeOS Home stays the default
+HOME via the config_defaultHome overlay (RoleManager assigns it silently, no chooser);
+QuickStep provides navbar + Recents/app-switcher + gesture handling.
 
 Usage: patch-remove-lineage-apps.py [SRC_ROOT=/srv/src]
 """
@@ -17,7 +24,6 @@ SRC = sys.argv[1] if len(sys.argv) > 1 else "/srv/src"
 # file -> set of exact module tokens (a whole list entry) to drop
 EDITS = {
     # AOSP base product (inherited by every handheld product):
-    #  - Launcher3QuickStep: the AOSP launcher (we ship MikeOS Home).
     #  - Provision: the AOSP self-provisioning stub. It is directBootAware with a
     #    priority-1 HOME filter, so on first boot it wins the PRE-UNLOCK home
     #    resolution (MikeSetup isn't direct-boot aware), silently sets
@@ -25,8 +31,7 @@ EDITS = {
     #    skip-if-provisioned guard then hides the whole onboarding ("zero
     #    onboarding" incident, 2026-07-27). With Provision gone, FallbackHome
     #    bridges the locked window and MikeSetup (priority 100) runs the wizard.
-    "build/make/target/product/handheld_system_ext.mk": {"Launcher3QuickStep", "Provision"},
-    "vendor/lineage/config/common_mobile.mk": {"Launcher3QuickStep"},
+    "build/make/target/product/handheld_system_ext.mk": {"Provision"},
     "vendor/lineage/config/common.mk":        {"LineageSetupWizard"},
 }
 

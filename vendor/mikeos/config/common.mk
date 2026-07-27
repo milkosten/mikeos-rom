@@ -93,7 +93,6 @@ PRODUCT_PACKAGES += \
 #     CATEGORY_SETUP_WIZARD + HOME and marks the device provisioned when done).
 # PRODUCT_PACKAGES_REMOVE strips them from the product package set even though inherited.
 PRODUCT_PACKAGES_REMOVE += \
-    Launcher3QuickStep \
     LineageSetupWizard \
     Provision
 
