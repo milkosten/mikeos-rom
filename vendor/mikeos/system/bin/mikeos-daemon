@@ -86,15 +86,19 @@ log() { echo "[mikeos-daemon] $*"; }
 # Idempotent; retried until role service is up.
 # ---------------------------------------------------------------------------
 (
-  n=0
-  until [ $n -ge 40 ]; do
+  # NO retry cap: on a slow first boot (dexopt) + a fast user, the capped loop
+  # expired before the role service accepted the grant -> chooser at wizard exit
+  # (2026-07-27 v17 incident). Loop until BOTH mechanisms confirm; exits on success.
+  until false; do
     if [ "$(getprop sys.boot_completed)" = "1" ]; then
-      if cmd role add-role-holder --user 0 android.app.role.HOME com.mikeos.launcher >/dev/null 2>&1; then
-        HOLDER=$(cmd role get-role-holders --user 0 android.app.role.HOME 2>/dev/null)
-        case "$HOLDER" in *com.mikeos.launcher*) log "home role: com.mikeos.launcher enforced"; break;; esac
-      fi
+      cmd role add-role-holder --user 0 android.app.role.HOME com.mikeos.launcher >/dev/null 2>&1 || true
+      # second, independent mechanism — the persistent preferred activity
+      # (identical to the user tapping "Always"); bench-verified.
+      cmd package set-home-activity --user 0 com.mikeos.launcher/.MainActivity >/dev/null 2>&1 || true
+      HOLDER=$(cmd role get-role-holders --user 0 android.app.role.HOME 2>/dev/null)
+      case "$HOLDER" in *com.mikeos.launcher*) log "home role: com.mikeos.launcher enforced (role + preferred)"; break;; esac
     fi
-    n=$((n+1)); sleep 5
+    sleep 5
   done
 ) &
 
