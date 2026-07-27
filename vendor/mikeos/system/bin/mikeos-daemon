@@ -50,6 +50,11 @@ export REDIS_URL="redis://127.0.0.1:6379"
 export IPC_SOCKET_PATH="$MIKEOS_DATA/run/miked.sock"
 export OLLAMA_GPU_URL="ollama://mikeos:uB49VXwMDy7R2JE0H7mI@81.8.177.182:11443"
 export NODE_OPTIONS=--max-old-space-size=1024
+# THE daemon auth token every MikeOS app uses. WITHOUT this the daemon can't persist a
+# token to the read-only /etc/mikeos, so it mints a RANDOM in-memory token each boot and
+# rejects every app's bearer (401 on /api/agent/chat, /api/devices/pair, etc.) — which broke
+# onboarding pairing ("can't reach the MikeOS brain"). auth.ts reads MIKEOS_DAEMON_TOKEN first.
+export MIKEOS_DAEMON_TOKEN=7bdc23451b18b5801036f992b66a872670975d19
 
 log() { echo "[mikeos-daemon] $*"; }
 

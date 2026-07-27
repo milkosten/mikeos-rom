@@ -61,6 +61,16 @@ else
   echo "  LINEAGE_BUILD mikeos_ prefix already handled (or patcher n/a)"
 fi
 
+# --- MikeOS: remove LineageOS's launcher (Trebuchet) + SetupWizard ------------
+# PRODUCT_PACKAGES_REMOVE is a no-op on this tree, so patch the makefiles that add
+# Launcher3QuickStep (AOSP handheld_system_ext.mk + lineage) and LineageSetupWizard
+# (lineage) so they're never in PRODUCT_PACKAGES. Else the phone shows a "pick a
+# launcher" chooser AND a second "Welcome to LineageOS" onboarding. Idempotent;
+# re-applied every build (a repo sync reverts it). MikeOS Home + MikeSetup replace both.
+banner "remove Lineage launcher + setup wizard (patch, PRODUCT_PACKAGES_REMOVE is a no-op here)"
+python3 "${SRC_ROOT}/vendor/mikeos/scripts/patch-remove-lineage-apps.py" "${SRC_ROOT}" || \
+  echo "  WARN: lineage-apps removal patch failed (continuing)"
+
 # --- Envsetup -----------------------------------------------------------------
 banner "source build/envsetup.sh"
 # shellcheck disable=SC1091

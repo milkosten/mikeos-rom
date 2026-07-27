@@ -28,6 +28,16 @@ PRODUCT_BRAND := MikeOS
 PRODUCT_MODEL := MikeOS (Pixel 9a)
 PRODUCT_MANUFACTURER := Google
 
+# --- Remove LineageOS's launcher (Trebuchet) + setup wizard --------------------
+# MUST live in the TOP-LEVEL product makefile, AFTER the inherits: PRODUCT_PACKAGES_REMOVE
+# set in an inherited makefile (vendor/mikeos/config/common.mk) was NOT honored — both
+# modules stayed in the resolved PRODUCT_PACKAGES and shipped in system_ext, giving a
+# "pick a launcher" chooser AND a second "Welcome to LineageOS" onboarding after MikeSetup.
+# Declared here so it actually strips them. MikeOS Home + MikeSetup replace both.
+PRODUCT_PACKAGES_REMOVE += \
+    Launcher3QuickStep \
+    LineageSetupWizard
+
 # KNOWN-UNVERIFIED (see README "KNOWN-UNVERIFIED"): lineage_tegu.mk runs
 # `PRODUCT_ENFORCE_ARTIFACT_PATH_REQUIREMENTS` and may assert on PRODUCT_NAME
 # via `PRODUCT_RELEASE_NAME` / Lineage's product-name check
