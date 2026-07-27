@@ -34,4 +34,28 @@
     <string name="config_defaultHome" translatable="false"
         >com.mikeos.launcher/com.mikeos.launcher.MainActivity</string>
 
+    <!--
+        NAVIGATION MODE — force 3-button (back / home / recents) as the BAKED default.
+
+        0 = 3-button, 1 = 2-button, 2 = gestural  (AOSP config_navBarInteractionMode).
+
+        Why this must be baked here, not left to runtime: MikeOS removes
+        Launcher3QuickStep (the gesture + Recents/Overview provider) so gestural
+        navigation has NO handler — on a Pixel, whose vendor default is gestural, the
+        user boots straight into a full-screen app with no visible nav and NO way out
+        (can't swipe home/back/recents). The daemon later runs `cmd overlay
+        enable-exclusive threebutton`, but that only fires after the runtime extracts
+        (tens of seconds on first boot) and depends on service timing — too late and
+        too fragile. Setting the framework default to 0 here makes the 3-button bar
+        appear from the very first frame, before any MikeOS process runs. The device's
+        gestural RRO is NOT enabled by a baked OverlayConfig (verified: no
+        product/vendor/system overlay/config/config.xml ships), so this base value wins.
+        The daemon enforcement stays as a belt-and-suspenders backup.
+
+        NOTE: the Recents button is shown but has no Overview provider (QuickStep is
+        removed and MikeOS Home is a plain Compose launcher) — Home and Back work; the
+        app-switcher needs a QuickStep/Overview provider, tracked separately.
+    -->
+    <integer name="config_navBarInteractionMode">0</integer>
+
 </resources>
