@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Auto-grant the Setup Wizard (com.mikeos.setup) the runtime permissions that gate
+  Wi-Fi SCAN RESULTS, so the Connectivity step can show the network list with NO
+  permission prompt during onboarding. Android gates visible SSIDs behind location /
+  nearby-devices permissions; the wizard uses them exclusively to render the Wi-Fi
+  picker (manifest declares neverForLocation on NEARBY_WIFI_DEVICES).
+-->
+<exceptions>
+    <exception package="com.mikeos.setup">
+        <permission name="android.permission.ACCESS_FINE_LOCATION" fixed="false"/>
+        <permission name="android.permission.ACCESS_COARSE_LOCATION" fixed="false"/>
+        <permission name="android.permission.NEARBY_WIFI_DEVICES" fixed="false"/>
+    </exception>
+</exceptions>

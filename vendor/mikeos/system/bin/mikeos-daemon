@@ -76,6 +76,29 @@ log() { echo "[mikeos-daemon] $*"; }
 ) &
 
 # ---------------------------------------------------------------------------
+# HOME ROLE ENFORCE — kill the "MikeOS Home vs Trebuchet" chooser for good.
+# With QuickStep restored (it renders ALL navigation on Android 16) there are two
+# HOME candidates; the config_defaultHome overlay did not reliably win the role
+# on first boot, so users got a launcher chooser after onboarding. Root may set
+# the role directly. BENCH-VERIFIED (CF instance, same two-launcher setup):
+# add-role-holder -> repeated HOME goes straight to MikeOS Home, no chooser, and
+# QuickStep still draws the navbar + working Recents while NOT being the holder.
+# Idempotent; retried until role service is up.
+# ---------------------------------------------------------------------------
+(
+  n=0
+  until [ $n -ge 40 ]; do
+    if [ "$(getprop sys.boot_completed)" = "1" ]; then
+      if cmd role add-role-holder --user 0 android.app.role.HOME com.mikeos.launcher >/dev/null 2>&1; then
+        HOLDER=$(cmd role get-role-holders --user 0 android.app.role.HOME 2>/dev/null)
+        case "$HOLDER" in *com.mikeos.launcher*) log "home role: com.mikeos.launcher enforced"; break;; esac
+      fi
+    fi
+    n=$((n+1)); sleep 5
+  done
+) &
+
+# ---------------------------------------------------------------------------
 # LOCATION PROVIDER KICK — the fix for "GPS dead on a fresh phone".
 # A freshly-installed (= freshly-wiped) app sits in Android's STOPPED STATE and
 # does NOT receive BOOT_COMPLETED until something launches a component — so the

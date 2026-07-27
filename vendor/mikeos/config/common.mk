@@ -139,4 +139,5 @@ $(call inherit-product-if-exists, vendor/mikeos/system/runtime.mk)
 # provider role is removed (it becomes a plain reader of GET /api/location).
 PRODUCT_PACKAGES += MikeLocation
 PRODUCT_COPY_FILES += \
-    vendor/mikeos/etc/default-permissions/mikeos-location-default-permissions.xml:$(TARGET_COPY_OUT_PRODUCT)/etc/default-permissions/mikeos-location-default-permissions.xml
+    vendor/mikeos/etc/default-permissions/mikeos-location-default-permissions.xml:$(TARGET_COPY_OUT_PRODUCT)/etc/default-permissions/mikeos-location-default-permissions.xml \
+    vendor/mikeos/etc/default-permissions/mikeos-setup-default-permissions.xml:$(TARGET_COPY_OUT_PRODUCT)/etc/default-permissions/mikeos-setup-default-permissions.xml

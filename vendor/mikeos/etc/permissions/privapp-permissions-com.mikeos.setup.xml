@@ -19,5 +19,11 @@
 <permissions>
     <privapp-permissions package="com.mikeos.setup">
         <permission name="android.permission.WRITE_SECURE_SETTINGS"/>
+        <!-- Wi-Fi onboarding: scan + join networks inline (Settings-app path) and
+             auto-enable mobile data when a SIM is present — the same privileged
+             powers Android's own SetupWizard holds. -->
+        <permission name="android.permission.NETWORK_SETTINGS"/>
+        <permission name="android.permission.NETWORK_SETUP_WIZARD"/>
+        <permission name="android.permission.MODIFY_PHONE_STATE"/>
     </privapp-permissions>
 </permissions>
