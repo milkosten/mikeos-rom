@@ -36,7 +36,8 @@ PRODUCT_MANUFACTURER := Google
 # Declared here so it actually strips them. MikeOS Home + MikeSetup replace both.
 PRODUCT_PACKAGES_REMOVE += \
     Launcher3QuickStep \
-    LineageSetupWizard
+    LineageSetupWizard \
+    Provision
 
 # KNOWN-UNVERIFIED (see README "KNOWN-UNVERIFIED"): lineage_tegu.mk runs
 # `PRODUCT_ENFORCE_ARTIFACT_PATH_REQUIREMENTS` and may assert on PRODUCT_NAME

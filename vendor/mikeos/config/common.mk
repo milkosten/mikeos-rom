@@ -94,7 +94,8 @@ PRODUCT_PACKAGES += \
 # PRODUCT_PACKAGES_REMOVE strips them from the product package set even though inherited.
 PRODUCT_PACKAGES_REMOVE += \
     Launcher3QuickStep \
-    LineageSetupWizard
+    LineageSetupWizard \
+    Provision
 
 # --- MikeSetup privileged-permission allowlist --------------------------------
 # MikeSetup is a /product/priv-app; it requests WRITE_SECURE_SETTINGS (to flip

@@ -59,6 +59,25 @@ export MIKEOS_DAEMON_TOKEN=7bdc23451b18b5801036f992b66a872670975d19
 log() { echo "[mikeos-daemon] $*"; }
 
 # ---------------------------------------------------------------------------
+# NAVIGATION: force 3-button nav. Launcher3QuickStep (the gesture/Recents
+# provider) is removed from MikeOS, so gestural navigation has NO handler —
+# users get trapped in full-screen apps (no swipe-home/Recents). The Google
+# vendor blobs default to the gestural overlay, so enforce 3-button on every
+# boot (idempotent; retried in background until system services are up).
+# ---------------------------------------------------------------------------
+(
+  n=0
+  until [ $n -ge 30 ]; do
+    if cmd overlay enable-exclusive --category com.android.internal.systemui.navbar.threebutton >/dev/null 2>&1; then
+      settings put secure navigation_mode 0 >/dev/null 2>&1 || true
+      log "navigation: 3-button enforced"
+      break
+    fi
+    n=$((n+1)); sleep 5
+  done
+) &
+
+# ---------------------------------------------------------------------------
 # 0. FIRST-BOOT EXTRACTION of the baked runtime payload (idempotent).
 # ---------------------------------------------------------------------------
 if [ ! -x "$MIKEOS_RUNTIME/bin/node" ] || [ ! -f "$MIKEOS_RUNTIME/.extracted" ]; then

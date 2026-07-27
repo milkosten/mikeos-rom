@@ -16,9 +16,16 @@ SRC = sys.argv[1] if len(sys.argv) > 1 else "/srv/src"
 
 # file -> set of exact module tokens (a whole list entry) to drop
 EDITS = {
-    # AOSP base product default launcher (inherited by every handheld product) —
-    # this is the one that actually keeps Trebuchet/Launcher3QuickStep in the set.
-    "build/make/target/product/handheld_system_ext.mk": {"Launcher3QuickStep"},
+    # AOSP base product (inherited by every handheld product):
+    #  - Launcher3QuickStep: the AOSP launcher (we ship MikeOS Home).
+    #  - Provision: the AOSP self-provisioning stub. It is directBootAware with a
+    #    priority-1 HOME filter, so on first boot it wins the PRE-UNLOCK home
+    #    resolution (MikeSetup isn't direct-boot aware), silently sets
+    #    device_provisioned=1 + user_setup_complete=1, and MikeSetup's
+    #    skip-if-provisioned guard then hides the whole onboarding ("zero
+    #    onboarding" incident, 2026-07-27). With Provision gone, FallbackHome
+    #    bridges the locked window and MikeSetup (priority 100) runs the wizard.
+    "build/make/target/product/handheld_system_ext.mk": {"Launcher3QuickStep", "Provision"},
     "vendor/lineage/config/common_mobile.mk": {"Launcher3QuickStep"},
     "vendor/lineage/config/common.mk":        {"LineageSetupWizard"},
 }

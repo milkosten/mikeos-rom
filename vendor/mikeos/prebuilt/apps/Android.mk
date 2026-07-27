@@ -204,6 +204,18 @@ LOCAL_MODULE_PATH := $(TARGET_OUT_PRODUCT)/app
 LOCAL_DEX_PREOPT := false
 include $(BUILD_PREBUILT)
 
+# com.mikeos.location
+include $(CLEAR_VARS)
+LOCAL_MODULE := MikeLocation
+LOCAL_MODULE_TAGS := optional
+LOCAL_MODULE_CLASS := APPS
+LOCAL_MODULE_SUFFIX := $(COMMON_ANDROID_PACKAGE_SUFFIX)
+LOCAL_SRC_FILES := com.mikeos.location.apk
+LOCAL_CERTIFICATE := PRESIGNED
+LOCAL_MODULE_PATH := $(TARGET_OUT_PRODUCT)/app
+LOCAL_DEX_PREOPT := false
+include $(BUILD_PREBUILT)
+
 # com.mikeos.mail
 include $(CLEAR_VARS)
 LOCAL_MODULE := MikeMail
@@ -444,20 +456,3 @@ LOCAL_MODULE_PATH := $(TARGET_OUT_PRODUCT)/app
 LOCAL_DEX_PREOPT := false
 include $(BUILD_PREBUILT)
 
-
-# com.mikeos.location — the MikeOS system GNSS provider (feeds the daemon).
-# Manually maintained (NOT from the app store, so fetch-apps.sh must preserve it).
-# System app in /product/app (preinstalled -> non-removable). It needs only RUNTIME
-# location perms, so priv-app is unnecessary (and would require a privapp-permissions
-# allowlist on Android 16). Location is auto-granted via the default-permissions XML
-# (see vendor/mikeos/etc/default-permissions/) so there is no first-run prompt.
-include $(CLEAR_VARS)
-LOCAL_MODULE := MikeLocation
-LOCAL_MODULE_TAGS := optional
-LOCAL_MODULE_CLASS := APPS
-LOCAL_MODULE_SUFFIX := $(COMMON_ANDROID_PACKAGE_SUFFIX)
-LOCAL_SRC_FILES := com.mikeos.location.apk
-LOCAL_CERTIFICATE := PRESIGNED
-LOCAL_MODULE_PATH := $(TARGET_OUT_PRODUCT)/app
-LOCAL_DEX_PREOPT := false
-include $(BUILD_PREBUILT)
