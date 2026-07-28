@@ -84,6 +84,31 @@ allow mikedaemon self:global_capability_class_set { setuid setgid net_raw };
 # exactly what broke the v19 self-scan on first flash. This is the same allow
 # the platform grants shell/su/dumpstate for the shell-command mechanism. This
 # rule is on system_server's (enforcing) side, so `permissive mikedaemon;`
-# above does NOT cover it. Confirmed the sole blocker via `setenforce 0`
-# (daemon then reported `SELF-SCAN wifi=10`).
+# above does NOT cover it.
+#
+# TWO rules are needed, exactly like the platform grants `dumpstate` to receive
+# `dumpsys` output (system/sepolicy: `allow system_server dumpstate:fd use;` +
+# `allow system_server dumpstate:fifo_file write;`):
+#   1. fd use        — let system_server reference the passed stdout fd.
+#   2. fifo_file APPEND — let system_server write the results into the daemon's
+#                       stdout PIPE (labeled mikedaemon, since Node created it).
+# The operative permission is `append`, NOT `write`: the shell-command fd is
+# opened O_APPEND, so the kernel checks `append` (a DISTINCT SELinux perm). This
+# mirrors the platform's own grant for receiving dumpsys output:
+#     allow system_server dumpstate:fifo_file append;   (system/sepolicy)
+# Rule 2's denial is dontaudit'd upstream, so it blocks SILENTLY under enforcing
+# with NO avc log — which is why the fd-use-only AND the write-without-append
+# builds both still returned empty, while `setenforce 0` (which lifts dontaudit
+# too) made it work (`SELF-SCAN wifi=10`).
 allow system_server mikedaemon:fd use;
+allow system_server mikedaemon:fifo_file { read write append getattr ioctl };
+# THE actual blocker (found by instrumenting the daemon's run()): the `cmd wifi`
+# binder transaction to the wifi service (in system_server) failed with
+# "Failure calling service wifi: Failed transaction (2147483646)" — a binder-
+# layer denial, BEFORE any output. `mikedaemon` is permissive so its OUTBOUND
+# call is allowed, but system_server (enforcing) must be allowed to complete the
+# reply/transfer back to the mikedaemon domain. Without this the whole
+# cmd/dumpsys round-trip dies at the binder layer (the fd/fifo rules above only
+# matter once the transaction itself succeeds). This is what `su`/`shell` get via
+# binder_call(); dontaudit'd upstream, so it failed silently under enforcing.
+allow system_server mikedaemon:binder { call transfer };
