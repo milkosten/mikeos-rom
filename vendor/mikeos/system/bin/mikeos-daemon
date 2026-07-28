@@ -76,6 +76,25 @@ log() { echo "[mikeos-daemon] $*"; }
 ) &
 
 # ---------------------------------------------------------------------------
+# ASSISTED GPS (positioning.md Phase 1) — the GNSS HAL logged "PSDS disabled by
+# system setting", so the phone decodes ephemeris from the sky (slow cold TTFF
+# 2-5 min, fails in urban canyons). assisted_gps_enabled=1 lets the HAL pull
+# predicted satellite data (PSDS) + SUPL over the network. Root, reversible,
+# idempotent. (SUPL host itself is in the vendor blob; this is the free lever.)
+# ---------------------------------------------------------------------------
+(
+  n=0
+  until [ $n -ge 30 ]; do
+    if [ "$(getprop sys.boot_completed)" = "1" ]; then
+      settings put global assisted_gps_enabled 1 >/dev/null 2>&1 || true
+      log "assisted GPS (PSDS/SUPL) enabled"
+      break
+    fi
+    n=$((n+1)); sleep 5
+  done
+) &
+
+# ---------------------------------------------------------------------------
 # HOME ROLE ENFORCE — kill the "MikeOS Home vs Trebuchet" chooser for good.
 # With QuickStep restored (it renders ALL navigation on Android 16) there are two
 # HOME candidates; the config_defaultHome overlay did not reliably win the role
