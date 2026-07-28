@@ -73,3 +73,17 @@ allow mikedaemon self:udp_socket { create_socket_perms };
 # intentionally coarse for the first draft — tighten from real denials.
 allow mikedaemon self:capability { setuid setgid net_raw net_admin };
 allow mikedaemon self:global_capability_class_set { setuid setgid net_raw };
+
+# ---- Radio self-scan: let `cmd wifi` / `dumpsys` return results to us --------
+# The single-authority location service reads WiFi scan results
+# (`cmd wifi list-scan-results`) and cell towers (`dumpsys telephony.registry`)
+# directly from the daemon (root), so no app has to feed it. Both commands run
+# INSIDE system_server and write their output back through the caller's stdout
+# fd. system_server must be allowed to `use` an fd owned by the mikedaemon
+# domain, or the scan silently returns EMPTY (results never make it back) —
+# exactly what broke the v19 self-scan on first flash. This is the same allow
+# the platform grants shell/su/dumpstate for the shell-command mechanism. This
+# rule is on system_server's (enforcing) side, so `permissive mikedaemon;`
+# above does NOT cover it. Confirmed the sole blocker via `setenforce 0`
+# (daemon then reported `SELF-SCAN wifi=10`).
+allow system_server mikedaemon:fd use;
