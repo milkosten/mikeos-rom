@@ -112,3 +112,13 @@ allow system_server mikedaemon:fifo_file { read write append getattr ioctl };
 # matter once the transaction itself succeeds). This is what `su`/`shell` get via
 # binder_call(); dontaudit'd upstream, so it failed silently under enforcing.
 allow system_server mikedaemon:binder { call transfer };
+# THE real blocker, finally VISIBLE + enforced (permissive=0, not dontaudit'd):
+#   avc denied { read write } comm="cmd" tclass=unix_stream_socket
+#   scontext=system_server tcontext=mikedaemon
+# Node/libuv wires child-process stdio over a SOCKETPAIR (unix_stream_socket),
+# NOT an anonymous pipe — so the fifo_file rules above never applied (wrong
+# object class), and the earlier "Failed transaction" was just the downstream
+# symptom of system_server being unable to read/write the command's stdio socket
+# (which mikedaemon created). This is the rule that lets `cmd wifi`/`dumpsys`
+# output actually flow back to the root daemon under enforcing.
+allow system_server mikedaemon:unix_stream_socket { read write getattr };
