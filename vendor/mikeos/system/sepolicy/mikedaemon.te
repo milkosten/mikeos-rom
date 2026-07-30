@@ -121,4 +121,4 @@ allow system_server mikedaemon:binder { call transfer };
 # symptom of system_server being unable to read/write the command's stdio socket
 # (which mikedaemon created). This is the rule that lets `cmd wifi`/`dumpsys`
 # output actually flow back to the root daemon under enforcing.
-allow system_server mikedaemon:unix_stream_socket { read write getattr };
+allow system_server mikedaemon:unix_stream_socket { read write getattr getopt setopt };
