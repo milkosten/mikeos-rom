@@ -152,6 +152,38 @@ log() { echo "[mikeos-daemon] $*"; }
 ) &
 
 # ---------------------------------------------------------------------------
+# BAKED "mikeos" WI-FI — hard-coded network credentials for every MikeOS phone.
+# Product decision: if a Wi-Fi called "mikeos" is in range, the phone joins it
+# with passphrase "mikeos123" WITHOUT the user ever typing it. We do NOT force
+# Wi-Fi on or force a connect; we just PRE-SAVE the credentials as a known
+# network, so Android's normal auto-join picks it whenever it appears.
+#
+# Mechanism: `cmd wifi add-network <ssid> wpa2 <passphrase>` (WifiShellCommand),
+# callable by the root/shell uid — we are root init. wpa2 == WPA2-PSK, the
+# common home-AP case. Saved networks are enabled + auto-joinable by default.
+# Idempotent: we only add it once (skip if `list-networks` already shows it),
+# so re-adds don't pile up duplicate configs across reboots. Retried until the
+# Wi-Fi service is up. Reversible (user can Forget it in Settings).
+# ---------------------------------------------------------------------------
+(
+  n=0
+  until [ $n -ge 40 ]; do
+    if [ "$(getprop sys.boot_completed)" = "1" ]; then
+      # already saved? (list-networks prints "<id>  mikeos  [WPA2...]")
+      if cmd wifi list-networks 2>/dev/null | grep -qiE '(^|[[:space:]])mikeos([[:space:]]|$)'; then
+        log "wifi: 'mikeos' network already saved"
+        break
+      fi
+      if cmd wifi add-network mikeos wpa2 mikeos123 >/dev/null 2>&1; then
+        log "wifi: baked 'mikeos' network saved (WPA2, auto-join)"
+        break
+      fi
+    fi
+    n=$((n+1)); sleep 5
+  done
+) &
+
+# ---------------------------------------------------------------------------
 # 0. VERSION-AWARE EXTRACTION of the baked runtime payload.
 # Mike's rule: code lives in the SYSTEM PAYLOAD (this tarball), never hand-
 # pushed into data dirs. The old ".extracted"-marker check meant a ROM update
