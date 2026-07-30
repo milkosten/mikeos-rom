@@ -6,7 +6,6 @@ index 1cfa4d1..3176d92 100644
      <uses-permission android:name="android.permission.RECOVERY" />
      <uses-permission android:name="android.permission.START_ACTIVITIES_FROM_BACKGROUND" />
      <uses-permission android:name="android.permission.WAKE_LOCK" />
-+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
 +    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
      <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS" />
  
