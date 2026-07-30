@@ -142,3 +142,12 @@ PRODUCT_COPY_FILES += \
     vendor/mikeos/etc/default-permissions/mikeos-location-default-permissions.xml:$(TARGET_COPY_OUT_PRODUCT)/etc/default-permissions/mikeos-location-default-permissions.xml \
     vendor/mikeos/etc/default-permissions/mikeos-setup-default-permissions.xml:$(TARGET_COPY_OUT_PRODUCT)/etc/default-permissions/mikeos-setup-default-permissions.xml \
     vendor/mikeos/etc/sysconfig/mikeos-sysconfig.xml:$(TARGET_COPY_OUT_PRODUCT)/etc/sysconfig/mikeos-sysconfig.xml
+
+# --- MikeOS system-OTA: repoint the LineageOS Updater at our OTA server --------
+# The in-tree Updater (packages/apps/Updater) is the MikeOS OTA client. It reads
+# system property lineage.updater.uri for the manifest endpoint (see
+# DeviceInfoUtils.PROP_UPDATER_URI). Point it at ota-api.osmike.com. The {device}
+# literal is substituted at runtime by the app (DeviceInfoUtils.device), so keep
+# it literal here. Updater lives on /product, so this is a PRODUCT_PRODUCT prop.
+PRODUCT_PRODUCT_PROPERTIES += \
+    lineage.updater.uri=https://ota-api.osmike.com/api/v2/devices/{device}/builds
