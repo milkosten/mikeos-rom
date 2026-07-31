@@ -404,6 +404,10 @@ public class UpdaterController {
         if (caps == null) {
             return true;
         }
+        // MikeOS: treat ANY Wi-Fi as unmetered; only cellular gates OTA downloads.
+        if (caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
+            return false;
+        }
         return !caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED);
     }
 
