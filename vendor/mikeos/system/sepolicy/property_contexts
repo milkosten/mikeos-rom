@@ -1,0 +1,22 @@
+# =============================================================================
+# MikeOS system properties — SELinux property_contexts (v37).
+#
+# Defines the ro.mikeos.* namespace so the property manager actually keeps these
+# props at runtime. WITHOUT an entry here, `getprop ro.mikeos.version` returned
+# EMPTY on the booted v36 device even though ro.mikeos.version=36-tegu was in
+# build.prop — an undefined property name is dropped. The value itself is set
+# from /product (PRODUCT_PRODUCT_PROPERTIES in vendor/mikeos/config/version.mk);
+# this file just labels the name so it is defined + world-readable.
+#
+# This dir is fed to the build via SYSTEM_EXT_PRIVATE_SEPOLICY_DIRS
+# (vendor/mikeos/system/system-daemon.mk); Soong's system_ext_property_contexts
+# module collects property_contexts_files{.system_ext_private} — the same path
+# by which the sibling file_contexts here already lands. build_prop is the
+# standard label for read-only build properties (world-readable, u:object_r).
+#
+# `exact string` = an exact property name (not a prefix) whose value is a string.
+# =============================================================================
+
+ro.mikeos.version    u:object_r:build_prop:s0 exact string
+ro.mikeos.channel    u:object_r:build_prop:s0 exact string
+ro.mikeos.device     u:object_r:build_prop:s0 exact string
