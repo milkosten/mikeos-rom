@@ -53,6 +53,23 @@ allow mikedaemon mikeos_data_file:lnk_file { create_file_perms };
 # Relabel dirs/files under /data/mikeos (init restorecon / our chmod).
 allow mikedaemon mikeos_data_file:{ dir file } relabelto;
 
+# ---- init creates /data/mikeos in `on post-fs-data` (BOOT AUTO-START) ---------
+# The mikedaemon.rc `on post-fs-data` block mkdir's /data/mikeos + the sub-dirs
+# and chmod/chown's them (`mkdir /data/mikeos 0771 root system`). Those built-in
+# init commands run as the domain that owns the .rc's partition. The .rc is
+# installed to /PRODUCT/etc/init (system-daemon.mk) precisely so this runs as
+# `init` (a coredomain) and NOT `vendor_init` (which is barred from
+# core_data_file_type — mikeos_data_file is one, so a /vendor .rc got a `setattr`
+# DENIAL that aborted the block before `start mikeos-daemon`: the v37 regression).
+# `init` already has create+setattr on core_data_file_type dirs via the base
+# init.te block; these explicit allows document the dependency and survive any
+# future tightening of that base grant. (init is coredomain, so no neverallow.)
+allow init mikeos_data_file:dir { create getattr setattr search open read write add_name remove_name relabelto };
+# restorecon_recursive /data/mikeos in the same block relabels the tree to
+# mikeos_data_file — init needs relabelto/relabelfrom on both the source
+# (freshly-created, may inherit system_data_root_file) and target types.
+allow init mikeos_data_file:{ file lnk_file sock_file } { getattr setattr relabelto };
+
 # ---- Exec its own launcher/runtime -------------------------------------------
 # Run the Node/Postgres/Redis binaries. On the Termux-layered path these live
 # under an app data dir; on the baked ROM they live under system/vendor. We

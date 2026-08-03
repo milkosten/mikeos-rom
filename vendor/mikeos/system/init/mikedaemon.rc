@@ -12,8 +12,14 @@
 # extracted ONCE on first boot to /data/mikeos/runtime (Termux-free). The
 # launcher /product/bin/mikeos-daemon also extracts it (belt-and-suspenders).
 #
-# Installed to /vendor/etc/init/mikedaemon.rc (Android auto-imports every .rc in
-# /vendor/etc/init at boot — no explicit `import` needed).
+# Installed to /PRODUCT/etc/init/mikedaemon.rc (Android auto-imports every .rc in
+# /product/etc/init at boot — no explicit `import` needed). It MUST be on /product
+# (or /system_ext), NOT /vendor: init runs a /vendor .rc's built-in commands under
+# the non-coredomain `vendor_init`, which is DENIED create/setattr on /data/mikeos
+# (labeled mikeos_data_file, a core_data_file_type) — that denial aborted the
+# post-fs-data block before `start mikeos-daemon` (the v37 boot-auto-start break).
+# On /product the block runs as `init` (a coredomain), which IS allowed. See
+# system-daemon.mk for the full write-up.
 #
 # PARTITION NOTE: the launcher lives at /PRODUCT/bin/mikeos-daemon (NOT
 # /system/bin — tegu's PRODUCT_ARTIFACT_PATH_REQUIREMENT forbids overlay content
@@ -55,7 +61,12 @@ service mikeos-daemon /product/bin/mikeos-daemon
 # post-fs-data runs after /data is mounted+decrypted, which is where /data/mikeos
 # must live. Modes are permissive-ish first-draft (0771); tighten with sepolicy.
 on post-fs-data
-    mkdir /data/mikeos 0771 root system
+    # FBE: Android (11+) requires an explicit `encryption=` action on any
+    # top-level /data/<dir> or init only LOG(WARNING)s "needs encryption action"
+    # (util.cpp ParseMkdir). The daemon must have its data at the post-fs-data /
+    # device-encrypted stage (it starts here, before user unlock), so we opt OUT
+    # of a per-directory FBE policy: encryption=None. (v34-v36 form; keep it.)
+    mkdir /data/mikeos 0771 root system encryption=None
     mkdir /data/mikeos/runtime 0755 root system
     mkdir /data/mikeos/pg 0700 root system
     mkdir /data/mikeos/redis 0771 root system

@@ -6,7 +6,7 @@
 # drop daemon-as-system entirely.
 #
 # This wires three things into the ROM (the runtime PAYLOAD is in runtime.mk):
-#   1. the init service .rc               -> /vendor/etc/init/mikedaemon.rc
+#   1. the init service .rc               -> /product/etc/init/mikedaemon.rc
 #   2. the hardened launcher (executable) -> /PRODUCT/bin/mikeos-daemon
 #   3. the mikedaemon sepolicy dir        -> BOARD_VENDOR_SEPOLICY_DIRS
 #
@@ -29,8 +29,28 @@
 # ---------------------------------------------------------------------------
 
 # --- 1. init service .rc (copy-file is fine; no +x needed for a .rc) ----------
+# INSTALL TO /PRODUCT, NOT /VENDOR (v38 boot-auto-start fix):
+#   The `on post-fs-data` block below mkdir's + chmod/chown's /data/mikeos, whose
+#   file_contexts label is `mikeos_data_file` (a `core_data_file_type`). init
+#   runs the built-in commands of a .rc under a subcontext keyed by the .rc's
+#   partition: only /vendor and /odm get the `vendor_init` context (init source
+#   subcontext.cpp: Subcontext({"/vendor","/odm"}, kVendorContext)); every other
+#   partition — including /product and /system_ext — runs as `init` itself.
+#   `vendor_init` is NOT a coredomain and the base vendor_init.te EXCLUDES
+#   `-core_data_file_type` from its create/setattr grants, so a /vendor .rc's
+#   `mkdir /data/mikeos ... <mode> <uid>` was DENIED at the setattr (chmod/chown)
+#   under enforcing:
+#       avc: denied { setattr } comm="init" name="mikeos"
+#            scontext=u:r:vendor_init:s0 tcontext=u:object_r:mikeos_data_file:s0
+#   which errored the mkdir command and ABORTED the block before `start
+#   mikeos-daemon` — so the daemon never auto-started (only a manual ctl.start
+#   worked). `init` (a coredomain) DOES have create+setattr on core_data_file_type
+#   dirs (base init.te grants `file_type` minus app/vendor/system types — NOT
+#   minus core_data_file_type). Installing the .rc to /product/etc/init makes the
+#   block run as `init`, which is allowed. init auto-imports /product/etc/init/*.rc
+#   exactly as it does /vendor/etc/init/*.rc, so nothing else changes.
 PRODUCT_COPY_FILES += \
-    vendor/mikeos/system/init/mikedaemon.rc:$(TARGET_COPY_OUT_VENDOR)/etc/init/mikedaemon.rc
+    vendor/mikeos/system/init/mikedaemon.rc:$(TARGET_COPY_OUT_PRODUCT)/etc/init/mikedaemon.rc
 
 # --- 2. hardened launcher (needs +x -> prebuilt EXECUTABLE module) ------------
 # Defined in vendor/mikeos/system/Android.mk (BUILD_PREBUILT, EXECUTABLES ->
