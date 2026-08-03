@@ -4,7 +4,7 @@
 # behaviour off these. Bump ro.mikeos.version on each ROM release.
 
 PRODUCT_PROPERTY_OVERRIDES += \
-    ro.mikeos.version=1.0-tegu \
+    ro.mikeos.version=22-tegu \
     ro.mikeos.channel=stable \
     ro.mikeos.device=tegu
 
