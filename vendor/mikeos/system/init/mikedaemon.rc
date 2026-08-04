@@ -72,20 +72,28 @@ on post-fs-data
     mkdir /data/mikeos/redis 0771 root system
     mkdir /data/mikeos/daemon 0771 root system
     mkdir /data/mikeos/run 0771 root system
-    # FIRST-BOOT / ROM-UPDATE: extract the baked Node+Redis+daemon runtime payload
-    # to /data/mikeos/runtime. VERSION-AWARE (not marker-only): re-extract only if
-    #   (a) the runtime is missing/broken (no bin/node), OR
-    #   (b) the baked payload's RUNTIME_VERSION differs from the extracted copy's.
-    # This mirrors the launcher's guard so a ROM update refreshes the daemon, while
-    # a daemon-OTA (which STAMPS runtime with the phone's BAKED RUNTIME_VERSION)
-    # is NOT clobbered on the next reboot — the versions match, so no re-extract.
-    # A broken/missing runtime still self-heals (case a). `exec` blocks post-fs-data
-    # until the untar completes; toybox tar handles gzip. (The launcher re-checks the
-    # same way — belt-and-suspenders; this pre-warms so the first `start` is ready.)
-    exec u:r:mikedaemon:s0 root root -- /system/bin/sh -c "PV=\$(/system/bin/tar -xzOf /product/mikeos/mikeos-runtime.tar.gz RUNTIME_VERSION 2>/dev/null | /system/bin/head -1); CV=\$(/system/bin/cat /data/mikeos/runtime/RUNTIME_VERSION 2>/dev/null | /system/bin/head -1); if [ ! -x /data/mikeos/runtime/bin/node ] || { [ -n \"\$PV\" ] && [ \"\$PV\" != \"\$CV\" ]; }; then /system/bin/rm -rf /data/mikeos/runtime && /system/bin/mkdir -p /data/mikeos/runtime && /system/bin/tar -xzf /product/mikeos/mikeos-runtime.tar.gz -C /data/mikeos/runtime && /system/bin/chmod -R a+rX /data/mikeos/runtime && /system/bin/touch /data/mikeos/runtime/.extracted; fi"
+    # NOTE (v39): there used to be an `exec u:r:mikedaemon:s0 ... tar -xzf ...` here to
+    # pre-extract the runtime. It was REMOVED — it is the reason the daemon never
+    # auto-started on v37/v38. Bench evidence (device 5C201): the mkdirs above all ran
+    # and got the correct mikeos_data_file label, there were ZERO enforcing denials, yet
+    # the runtime never extracted and `start mikeos-daemon` never took effect. A failing
+    # `exec` aborts the remaining commands of its trigger block, so `start` below was
+    # never reached. The extract is ALSO fully implemented in the launcher
+    # (/product/bin/mikeos-daemon, the PAYLOAD_VER/CURRENT_VER guard) — which is proven
+    # to work — so the init copy was pure redundancy with a boot-breaking failure mode.
+    # This file's own header already recommended "move the extract into the launcher
+    # only (it already does it) and drop the exec here". Done.
+    #
     # restorecon so the mikeos_data_file label (file_contexts) is applied to the
     # freshly-created dirs even before the next full relabel.
     restorecon_recursive /data/mikeos
-    # Now that the data root exists + is labeled + runtime extracted, launch the
-    # supervised daemon.
+    # The data root exists + is labeled; launch the supervised daemon. The launcher
+    # extracts/refreshes the runtime itself (version-aware) before starting Node.
+    start mikeos-daemon
+
+# Belt-and-suspenders late trigger: if anything above ever prevents the post-fs-data
+# `start` from taking effect, bring the daemon up once the system is fully booted.
+# `start` on an already-running service is a no-op, so this is safe + idempotent, and it
+# guarantees the phone is never left without its MikeOS brain.
+on property:sys.boot_completed=1
     start mikeos-daemon
