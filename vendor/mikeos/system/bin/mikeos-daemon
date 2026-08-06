@@ -70,17 +70,28 @@ log() { echo "[mikeos-daemon] $*"; }
 # /system_ext/priv-app/Launcher3QuickStep — it was never actually removed, and
 # has been present since v13. Back and Home gestures verified on tegu. See the
 # long note in overlay/frameworks/base/core/res/res/values/config.xml before
-# changing this back. Idempotent.
+# changing this back.
+#
+# MUST wait for sys.boot_completed, and MUST re-assert. Applying it early looks
+# like it works — the overlay call returns success — but something later in
+# system_server bring-up re-asserts the baked framework default, so the phone
+# still reached the home screen in 3-button mode. Verified by reboot: apply-once
+# = reverted; wait-for-boot + re-assert = sticks (checked at 150s uptime, past
+# the re-assert window). Only acts when the mode is wrong, so it is idempotent
+# and does not fight a user who deliberately picks 3-button in Settings.
 # ---------------------------------------------------------------------------
 (
   n=0
-  until [ $n -ge 30 ]; do
-    if cmd overlay enable-exclusive --category com.android.internal.systemui.navbar.gestural >/dev/null 2>&1; then
-      settings put secure navigation_mode 2 >/dev/null 2>&1 || true
-      log "navigation: gestural enforced"
-      break
+  while [ "$(getprop sys.boot_completed)" != "1" ] && [ $n -lt 60 ]; do
+    n=$((n+1)); sleep 2
+  done
+  i=0
+  while [ $i -lt 10 ]; do
+    if [ "$(settings get secure navigation_mode 2>/dev/null)" != "2" ]; then
+      cmd overlay enable-exclusive --category com.android.internal.systemui.navbar.gestural >/dev/null 2>&1 \
+        && log "navigation: gestural enforced"
     fi
-    n=$((n+1)); sleep 5
+    i=$((i+1)); sleep 6
   done
 ) &
 
