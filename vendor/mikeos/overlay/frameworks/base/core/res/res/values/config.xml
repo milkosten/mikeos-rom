@@ -35,27 +35,42 @@
         >com.mikeos.launcher/com.mikeos.launcher.MainActivity</string>
 
     <!--
-        NAVIGATION MODE — force 3-button (back / home / recents) as the BAKED default.
+        NAVIGATION MODE — gestural (iOS-style home indicator) as the BAKED default.
 
         0 = 3-button, 1 = 2-button, 2 = gestural  (AOSP config_navBarInteractionMode).
 
-        Why this must be baked here, not left to runtime: MikeOS removes
-        Launcher3QuickStep (the gesture + Recents/Overview provider) so gestural
-        navigation has NO handler — on a Pixel, whose vendor default is gestural, the
-        user boots straight into a full-screen app with no visible nav and NO way out
-        (can't swipe home/back/recents). The daemon later runs `cmd overlay
-        enable-exclusive threebutton`, but that only fires after the runtime extracts
-        (tens of seconds on first boot) and depends on service timing — too late and
-        too fragile. Setting the framework default to 0 here makes the 3-button bar
-        appear from the very first frame, before any MikeOS process runs. The device's
-        gestural RRO is NOT enabled by a baked OverlayConfig (verified: no
-        product/vendor/system overlay/config/config.xml ships), so this base value wins.
-        The daemon enforcement stays as a belt-and-suspenders backup.
+        HISTORY — READ THIS BEFORE SETTING IT BACK TO 0. This was 0 on the premise that
+        "MikeOS removes Launcher3QuickStep, so gestural navigation has NO handler and the
+        user boots into a full-screen app with no way out". That premise is FALSE for the
+        shipped ROM, and was already false when it was written:
 
-        NOTE: the Recents button is shown but has no Overview provider (QuickStep is
-        removed and MikeOS Home is a plain Compose launcher) — Home and Back work; the
-        app-switcher needs a QuickStep/Overview provider, tracked separately.
+          * PRODUCT_PACKAGES_REMOVE in config/common.mk lists only LineageSetupWizard and
+            Provision — Launcher3QuickStep is NOT in it. (And PRODUCT_PACKAGES_REMOVE is a
+            no-op against inherited packages anyway, so listing it would not have removed
+            it either.)
+          * On a v37 device Launcher3QuickStep ships baked at
+            /system_ext/priv-app/Launcher3QuickStep/Launcher3QuickStep.apk and
+            com.android.launcher3/com.android.quickstep.TouchInteractionService is
+            RUNNING. The daemon launcher already says "QuickStep is back since v13" — the
+            nav decision was simply never revisited after that.
+
+        VERIFIED on tegu 62271JEBF09145 (Android 16) with mode 2 live: swipe-from-left-edge
+        = Back and swipe-up-from-bottom = Home both work, driven by QuickStep. Gestural has
+        a handler, so the "no way out" risk does not apply.
+
+        Why gestural is the default now: the 3-button bar is a ~48dp opaque strip that sat
+        ON TOP of app content and the launcher dock — that is what "the buttons hide things"
+        meant. Gestural replaces it with a thin home indicator, the iOS model MikeOS Home
+        targets. Apps additionally inset content into the safe area (each app's Compose
+        theme wraps content in Modifier.safeDrawingPadding), so nothing hides under the
+        indicator either. This also retires the old caveat that Recents had no Overview
+        provider: QuickStep supplies Overview.
+
+        The device's RRO is not force-enabled by a baked OverlayConfig, so this base value
+        wins. The daemon launcher (vendor/mikeos/system/bin/mikeos-daemon) applies the
+        MATCHING gestural overlay as belt-and-suspenders — keep the two in sync, or a
+        reboot silently undoes this.
     -->
-    <integer name="config_navBarInteractionMode">0</integer>
+    <integer name="config_navBarInteractionMode">2</integer>
 
 </resources>

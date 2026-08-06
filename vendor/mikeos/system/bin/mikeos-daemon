@@ -59,16 +59,25 @@ export MIKEOS_DAEMON_TOKEN=7bdc23451b18b5801036f992b66a872670975d19
 log() { echo "[mikeos-daemon] $*"; }
 
 # ---------------------------------------------------------------------------
-# NAVIGATION: force 3-button nav (backup enforcement — the baked framework
-# overlay config_navBarInteractionMode=0 is primary; QuickStep is back since v13
-# because Android 16 renders ALL nav via the Launcher taskbar). Idempotent.
+# NAVIGATION: gestural nav — the iOS-style home indicator instead of a ~48dp
+# 3-button strip that painted ON TOP of app content and the launcher dock.
+#
+# This is BACKUP enforcement; the baked framework overlay
+# config_navBarInteractionMode=2 is primary. Keep the two in sync: this block
+# used to force `threebutton` and would silently undo the overlay on every boot.
+#
+# Safe because QuickStep (the gesture + Overview provider) ships baked at
+# /system_ext/priv-app/Launcher3QuickStep — it was never actually removed, and
+# has been present since v13. Back and Home gestures verified on tegu. See the
+# long note in overlay/frameworks/base/core/res/res/values/config.xml before
+# changing this back. Idempotent.
 # ---------------------------------------------------------------------------
 (
   n=0
   until [ $n -ge 30 ]; do
-    if cmd overlay enable-exclusive --category com.android.internal.systemui.navbar.threebutton >/dev/null 2>&1; then
-      settings put secure navigation_mode 0 >/dev/null 2>&1 || true
-      log "navigation: 3-button enforced"
+    if cmd overlay enable-exclusive --category com.android.internal.systemui.navbar.gestural >/dev/null 2>&1; then
+      settings put secure navigation_mode 2 >/dev/null 2>&1 || true
+      log "navigation: gestural enforced"
       break
     fi
     n=$((n+1)); sleep 5
