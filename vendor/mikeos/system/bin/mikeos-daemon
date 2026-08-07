@@ -212,7 +212,11 @@ log() { echo "[mikeos-daemon] $*"; }
 # triggers a clean re-extract, so ROM update => daemon update, atomically.
 # State (/data/mikeos/{db,daemon,redis,run}) is untouched by re-extraction.
 # ---------------------------------------------------------------------------
-PAYLOAD_VER=$(tar -xzOf "$MIKEOS_PAYLOAD" RUNTIME_VERSION 2>/dev/null | head -1)
+# Accept BOTH member spellings: GNU tar writes "RUNTIME_VERSION" or "./RUNTIME_VERSION"
+# depending on how the payload was packed, and only one of them matches, so a
+# single-spelling read silently yielded an empty version and defeated the
+# re-extract-on-mismatch check.
+PAYLOAD_VER=$({ tar -xzOf "$MIKEOS_PAYLOAD" RUNTIME_VERSION 2>/dev/null; tar -xzOf "$MIKEOS_PAYLOAD" ./RUNTIME_VERSION 2>/dev/null; } | head -1)
 CURRENT_VER=$(cat "$MIKEOS_RUNTIME/RUNTIME_VERSION" 2>/dev/null | head -1)
 if [ ! -x "$MIKEOS_RUNTIME/bin/node" ] || [ -z "$CURRENT_VER" ] || \
    { [ -n "$PAYLOAD_VER" ] && [ "$PAYLOAD_VER" != "$CURRENT_VER" ]; }; then

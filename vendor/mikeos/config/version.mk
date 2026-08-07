@@ -15,7 +15,7 @@
 # build_prop, world-readable) makes the value actually resolve at runtime.
 
 PRODUCT_PRODUCT_PROPERTIES += \
-    ro.mikeos.version=39-tegu \
+    ro.mikeos.version=40-tegu \
     ro.mikeos.channel=stable \
     ro.mikeos.device=tegu
 

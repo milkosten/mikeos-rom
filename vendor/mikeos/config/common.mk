@@ -76,10 +76,15 @@ PRODUCT_PACKAGES += \
     MikeSound \
     MikeSpace \
     MikeStoryteller \
+    MikeStreet \
     MikeText \
     MikeTime \
     MikeVideo \
     MikeVoice \
+    MikeSea \
+    MikeStats \
+    MikeTaxi \
+    MikeWeather \
     MikeWifi
 
 # --- Remove LineageOS's launcher + setup wizard (MikeOS replaces both) ---------
