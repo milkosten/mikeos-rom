@@ -110,10 +110,19 @@ module_name_for() {
   esac
 }
 
-# launcher + setup go to priv-app (privileged); everything else to product/app.
+# launcher + setup + voice go to priv-app (privileged); everything else to product/app.
+#
+# com.mikeos.voice is privileged because the two-stream call recorder needs
+# CAPTURE_AUDIO_OUTPUT, which is signature|privileged: the platform signature
+# ALONE is not enough, the app must also sit in priv-app AND be listed in a
+# privapp-permissions allowlist. Proven on tegu 2026-08-06 — without both,
+# CAPTURE_AUDIO_OUTPUT reports granted=false and VOICE_UPLINK/VOICE_DOWNLINK
+# return silence. The allowlist ships at
+# vendor/mikeos/etc/permissions/privapp-permissions-com.mikeos.voice.xml
+# (copied to /product/etc/permissions by config/common.mk).
 is_privileged() {
   case "$1" in
-    com.mikeos.launcher|com.mikeos.setup) return 0 ;;
+    com.mikeos.launcher|com.mikeos.setup|com.mikeos.voice) return 0 ;;
     *) return 1 ;;
   esac
 }

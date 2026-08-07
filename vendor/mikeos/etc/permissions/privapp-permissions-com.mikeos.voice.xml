@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Bake into the ROM at /product/etc/permissions/. Grants the privileged permissions the
+     two-stream call recorder needs. Without priv-app placement + this allowlist,
+     CAPTURE_AUDIO_OUTPUT shows granted=false and VOICE_UPLINK/DOWNLINK return silence
+     (proven 2026-08-06 — see tensor-call-recording). -->
+<permissions>
+    <privapp-permissions package="com.mikeos.voice">
+        <permission name="android.permission.CAPTURE_AUDIO_OUTPUT"/>
+        <permission name="android.permission.CONTROL_INCALL_EXPERIENCE"/>
+        <permission name="android.permission.MANAGE_OWN_CALLS"/>
+    </privapp-permissions>
+</permissions>

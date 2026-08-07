@@ -96,12 +96,22 @@ PRODUCT_PACKAGES_REMOVE += \
     LineageSetupWizard \
     Provision
 
-# --- MikeSetup privileged-permission allowlist --------------------------------
-# MikeSetup is a /product/priv-app; it requests WRITE_SECURE_SETTINGS (to flip
-# device_provisioned / user_setup_complete on completion). Android 16 fatally
-# refuses a priv-app's signature|privileged permission unless it is allowlisted.
+# --- Privileged-permission allowlists -----------------------------------------
+# Android 16 fatally refuses a priv-app's signature|privileged permission unless
+# it is allowlisted here. Both of these apps are placed in /product/priv-app by
+# scripts/fetch-apps.sh (is_privileged), which must stay in sync with this list.
+#
+# MikeSetup requests WRITE_SECURE_SETTINGS (to flip device_provisioned /
+# user_setup_complete on completion).
+#
+# MikeVoice requests CAPTURE_AUDIO_OUTPUT for the two-stream call recorder.
+# Being signed with the platform key is NOT sufficient on its own: without
+# priv-app placement AND this allowlist, CAPTURE_AUDIO_OUTPUT reports
+# granted=false and the VOICE_UPLINK/VOICE_DOWNLINK sources return silence
+# (proven on tegu 2026-08-06).
 PRODUCT_COPY_FILES += \
-    vendor/mikeos/etc/permissions/privapp-permissions-com.mikeos.setup.xml:$(TARGET_COPY_OUT_PRODUCT)/etc/permissions/privapp-permissions-com.mikeos.setup.xml
+    vendor/mikeos/etc/permissions/privapp-permissions-com.mikeos.setup.xml:$(TARGET_COPY_OUT_PRODUCT)/etc/permissions/privapp-permissions-com.mikeos.setup.xml \
+    vendor/mikeos/etc/permissions/privapp-permissions-com.mikeos.voice.xml:$(TARGET_COPY_OUT_PRODUCT)/etc/permissions/privapp-permissions-com.mikeos.voice.xml
 
 # --- Default wallpaper --------------------------------------------------------
 # A branded MikeOS wallpaper (violet sky + wordmark) so the home/lock background
