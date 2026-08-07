@@ -73,6 +73,13 @@ python3 "${SRC_ROOT}/vendor/mikeos/scripts/patch-remove-lineage-apps.py" "${SRC_
 
 # --- Envsetup -----------------------------------------------------------------
 banner "source build/envsetup.sh"
+# AOSP/Lineage's envsetup.sh — and breakfast/lunch/mka after it — reference
+# variables that are not set (e.g. TOP). Under `set -u` that aborts the build
+# immediately with "build/envsetup.sh: line 21: TOP: unbound variable", which is
+# why the documented manual recipe works in an interactive shell but this script
+# did not. Drop -u for the rest of the run; -e and pipefail stay on so genuine
+# failures still stop us.
+set +u
 # shellcheck disable=SC1091
 source build/envsetup.sh
 
