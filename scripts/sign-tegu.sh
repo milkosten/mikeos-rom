@@ -34,8 +34,16 @@ banner() { printf '\n========== %s ==========\n' "$*"; }
 cd "${SRC_ROOT}"
 banner "MikeOS ROM sign — ${PRODUCT}-${VARIANT}"
 
+# AOSP's envsetup.sh references unset variables (TOP); under `set -u` that aborts
+# immediately with "TOP: unbound variable". Same trap as build-tegu.sh. Keep -e
+# and pipefail so genuine failures still stop the signing run.
+set +u
 # shellcheck disable=SC1091
 source build/envsetup.sh
+# NOTE: VARIANT must carry the release token on this tree, e.g. "bp4a-userdebug",
+# because Android 16 lunch expects product-release-variant. Plain "user" gives
+# `lunch mikeos_tegu-user`, which does not resolve. Match the variant that
+# build-tegu.sh actually built, or `m dist` rebuilds the world.
 lunch "${PRODUCT}-${VARIANT}"
 
 # --- 1. Produce a target-files package ----------------------------------------
